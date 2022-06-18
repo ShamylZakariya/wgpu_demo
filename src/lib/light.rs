@@ -1,4 +1,5 @@
 use cgmath::*;
+use instant::Duration;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -53,6 +54,12 @@ impl Light {
             uniform,
             bind_group,
         }
+    }
+
+    pub fn update(&mut self, queue: &mut wgpu::Queue, _dt: Duration) {
+        // Update the uniform buffer and write it
+        self.uniform.position = self.position.into();
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform]));
     }
 
     fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {

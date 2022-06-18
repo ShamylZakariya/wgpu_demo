@@ -1,7 +1,10 @@
+use lib::scene;
+
 #[allow(dead_code)]
 mod lib;
 
 fn main() {
-    let scene = Box::new(lib::scene::Scene::new());
-    pollster::block_on(lib::app::run(scene));
+    pollster::block_on(lib::app::run(|window, gpu_state| {
+        scene::Scene::new(window, gpu_state)
+    }));
 }
