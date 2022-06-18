@@ -1,5 +1,7 @@
 pub mod app;
 pub mod camera;
+pub mod gpu_state;
+pub mod light;
 pub mod model;
 pub mod render_pipeline;
 pub mod resources;

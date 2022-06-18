@@ -27,6 +27,7 @@ pub async fn run(mut app: Box<dyn AppState>) {
         .build(&event_loop)
         .unwrap();
 
+    todo!("Make this take a closure");
     app.build(&window);
 
     // start even loop

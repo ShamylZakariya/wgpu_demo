@@ -31,3 +31,7 @@ Make a post process shader proof of concept
 
 - Step Five
 Make a post processing "stack" which can ping pong between two intermediate textures
+
+## Presently
+
+Can I use a closure to create the state instance? E.g., create GpuState, pass it to a closure which returns a configured State using the available GpuState. This has benefit that State doesn't need to keep everything in an option.

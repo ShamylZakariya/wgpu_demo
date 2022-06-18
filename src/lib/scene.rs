@@ -1,99 +1,61 @@
-use super::{app::AppState, texture};
+use cgmath::prelude;
+use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
-struct GpuState {
-    surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
-    depth_texture: texture::Texture,
-}
-
-impl GpuState {
-    async fn new(window: &winit::window::Window) -> Self {
-        let size = window.inner_size();
-
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
-        let surface = unsafe { instance.create_surface(window) };
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .unwrap();
-
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
-                    limits: wgpu::Limits::default(),
-                    label: None,
-                },
-                None,
-            )
-            .await
-            .unwrap();
-
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_preferred_format(&adapter).unwrap(),
-            width: size.width,
-            height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
-        };
-        surface.configure(&device, &config);
-
-        // create depth texture
-        let depth_texture =
-            texture::Texture::create_depth_texture(&device, &config, "Depth Texture");
-
-        Self {
-            surface,
-            device,
-            queue,
-            config,
-            size,
-            depth_texture,
-        }
-    }
-
-    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        if new_size.width > 0 && new_size.height > 0 {
-            self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
-            self.depth_texture =
-                texture::Texture::create_depth_texture(&self.device, &self.config, "Depth Texture");
-        }
-    }
-
-    fn size(&self) -> winit::dpi::PhysicalSize<u32> {
-        self.size
-    }
-}
+use super::{app, camera, gpu_state, light};
 
 pub struct Scene {
-    gpu_state: Option<GpuState>,
+    gpu_state: Option<gpu_state::GpuState>,
+    camera: Option<camera::CameraController>,
+    light: Option<light::Light>,
+    mouse_pressed: bool,
 }
 
 impl Scene {
     pub fn new() -> Self {
-        Self { gpu_state: None }
+        Self {
+            gpu_state: None,
+            camera: None,
+            light: None,
+            mouse_pressed: false,
+        }
     }
 }
 
-impl AppState for Scene {
+impl app::AppState for Scene {
     fn build(&mut self, window: &winit::window::Window) {
-        let gpu_state = pollster::block_on(GpuState::new(window));
+        let gpu_state = pollster::block_on(gpu_state::GpuState::new(window));
+
+        let camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
+        let projection = camera::Projection::new(
+            window.inner_size().width,
+            window.inner_size().height,
+            cgmath::Deg(45.0),
+            0.1,
+            100.0,
+        );
+
+        self.camera = Some(camera::CameraController::new(
+            &gpu_state.device,
+            camera,
+            projection,
+            4.0,
+            0.4,
+        ));
+        self.light = Some(light::Light::new(
+            &gpu_state.device,
+            (2.0, 2.0, 2.0),
+            (1.0, 1.0, 1.0),
+        ));
+
         self.gpu_state = Some(gpu_state);
     }
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if let Some(gpu_state) = self.gpu_state.as_mut() {
             gpu_state.resize(new_size);
+        }
+        if let Some(camera) = self.camera.as_mut() {
+            camera.resize(new_size);
         }
     }
 
@@ -108,10 +70,54 @@ impl AppState for Scene {
         event: Option<&winit::event::WindowEvent>,
         mouse_motion: Option<(f64, f64)>,
     ) -> bool {
+        if let Some(camera) = self.camera.as_mut() {
+            if let Some(event) = event {
+                match event {
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                virtual_keycode: Some(key),
+                                state,
+                                ..
+                            },
+                        ..
+                    } => {
+                        return camera.process_keyboard(*key, *state);
+                    }
+                    WindowEvent::MouseWheel { delta, .. } => {
+                        camera.process_scroll(delta);
+                        return true;
+                    }
+                    WindowEvent::MouseInput {
+                        button: MouseButton::Left,
+                        state,
+                        ..
+                    } => {
+                        self.mouse_pressed = *state == ElementState::Pressed;
+                        return true;
+                    }
+                    _ => {}
+                }
+            }
+
+            if let Some(mouse_motion) = mouse_motion {
+                if self.mouse_pressed {
+                    camera.process_mouse(mouse_motion.0, mouse_motion.1);
+                    return true;
+                }
+            }
+        }
+
         false
     }
 
-    fn update(&mut self, dt: instant::Duration) {}
+    fn update(&mut self, dt: instant::Duration) {
+        if let Some(camera) = self.camera.as_mut() {
+            if let Some(gpu) = self.gpu_state.as_mut() {
+                camera.update(&mut gpu.queue, dt)
+            }
+        }
+    }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         if let Some(gpu_state) = self.gpu_state.as_mut() {
@@ -126,7 +132,7 @@ impl AppState for Scene {
                         label: Some("Render Encoder"),
                     });
             {
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Render Pass"),
                     color_attachments: &[
                         // this is output [[location(0)]]
