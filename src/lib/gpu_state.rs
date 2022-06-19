@@ -5,6 +5,7 @@ pub struct GpuState {
     pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     pub depth_texture: super::texture::Texture,
+    pub pipeline_vendor: super::render_pipeline::RenderPipelineVendor,
 }
 
 impl GpuState {
@@ -54,6 +55,7 @@ impl GpuState {
             config,
             size,
             depth_texture,
+            pipeline_vendor: super::render_pipeline::RenderPipelineVendor::default(),
         }
     }
 

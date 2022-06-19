@@ -1,20 +1,32 @@
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
-use super::{app, camera, gpu_state, light};
+use super::{
+    app, camera, gpu_state, light,
+    model::{self, VertexBufferLayoutDescriber},
+    texture,
+};
+
+//////////////////////////////////////////////
+
+static PIPELINE_MODEL: &str = "PIPELINE_MODEL";
+
+//////////////////////////////////////////////
 
 pub struct Scene {
     gpu_state: gpu_state::GpuState,
     camera: camera::CameraController,
     light: light::Light,
+    model: model::Model,
     mouse_pressed: bool,
 }
 
 impl Scene {
-    pub fn new(window: &winit::window::Window, gpu_state: gpu_state::GpuState) -> Self {
+    pub fn new(mut gpu_state: gpu_state::GpuState, model: model::Model) -> Self {
         let camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
+
         let projection = camera::Projection::new(
-            window.inner_size().width,
-            window.inner_size().height,
+            gpu_state.size().width,
+            gpu_state.size().height,
             cgmath::Deg(45.0),
             0.1,
             100.0,
@@ -24,10 +36,43 @@ impl Scene {
 
         let light = light::Light::new(&gpu_state.device, (2.0, 2.0, 2.0), (1.0, 1.0, 1.0));
 
+        let _ = {
+            let layout = gpu_state
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some(PIPELINE_MODEL),
+                    bind_group_layouts: &[
+                        &model::Material::bind_group_layout(
+                            &gpu_state.device,
+                            "ModelPipeline Material Bind Group Layout",
+                        ),
+                        &camera::CameraController::bind_group_layout(&gpu_state.device),
+                        &light::Light::bind_group_layout(&gpu_state.device),
+                    ],
+                    push_constant_ranges: &[],
+                });
+
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("ModelPipeline Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("model.wgsl").into()),
+            };
+
+            gpu_state.pipeline_vendor.create_render_pipeline(
+                PIPELINE_MODEL,
+                &gpu_state.device,
+                &layout,
+                gpu_state.config.format,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::ModelVertex::desc(), model::Instance::desc()],
+                shader,
+            )
+        };
+
         Self {
             gpu_state,
             camera,
             light,
+            model,
             mouse_pressed: false,
         }
     }
@@ -89,7 +134,8 @@ impl app::AppState for Scene {
 
     fn update(&mut self, dt: instant::Duration) {
         self.camera.update(&mut self.gpu_state.queue, dt);
-        self.light.update(&mut self.gpu_state.queue, dt);
+        self.light.update(&mut self.gpu_state.queue);
+        self.model.update(&mut self.gpu_state.queue);
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -104,7 +150,7 @@ impl app::AppState for Scene {
                     label: Some("Render Encoder"),
                 });
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[
                     // this is output [[location(0)]]
@@ -131,6 +177,18 @@ impl app::AppState for Scene {
                     stencil_ops: None,
                 }),
             });
+
+            if let Some(pipeline) = self.gpu_state.pipeline_vendor.get_pipeline(PIPELINE_MODEL) {
+                use model::DrawModel;
+
+                render_pass.set_pipeline(pipeline);
+                render_pass.draw_model_instanced(
+                    &self.model,
+                    0..self.model.instances.len() as u32,
+                    &self.camera.bind_group,
+                    &self.light.bind_group,
+                );
+            }
         }
 
         self.gpu_state

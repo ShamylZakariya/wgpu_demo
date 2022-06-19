@@ -1,12 +1,15 @@
 use std::ops::Range;
 
-use wgpu::vertex_attr_array;
+use wgpu::{util::DeviceExt, vertex_attr_array};
 
 use super::texture;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait Vertex {
+static MODEL_VERTEX_ATTRIBS: [wgpu::VertexAttribute; 5] = vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x3, 3 => Float32x3, 4 => Float32x3];
+static MODEL_INSTANCE_ATTRIBS: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x3, 10 => Float32x3, 11 => Float32x3, ];
+
+pub trait VertexBufferLayoutDescriber {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a>;
 }
 
@@ -20,25 +23,71 @@ pub struct ModelVertex {
     pub bitangent: [f32; 3],
 }
 
-impl ModelVertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 5] = vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x3, 3 => Float32x3, 4 => Float32x3];
-}
-
-impl Vertex for ModelVertex {
+impl VertexBufferLayoutDescriber for ModelVertex {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &Self::ATTRIBS,
+            attributes: &MODEL_VERTEX_ATTRIBS,
         }
     }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Model {
-    pub meshes: Vec<Mesh>,
-    pub materials: Vec<Material>,
+#[derive(Copy, Clone)]
+pub struct Instance {
+    position: cgmath::Vector3<f32>,
+    rotation: cgmath::Quaternion<f32>,
+}
+
+impl Instance {
+    pub fn new<P, R>(position: P, rotation: R) -> Self
+    where
+        P: Into<cgmath::Vector3<f32>>,
+        R: Into<cgmath::Quaternion<f32>>,
+    {
+        Self {
+            position: position.into(),
+            rotation: rotation.into(),
+        }
+    }
+
+    fn to_data(&self) -> InstanceData {
+        let model =
+            cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
+        InstanceData {
+            model: model.into(),
+            normal_matrix: cgmath::Matrix3::from(self.rotation).into(),
+        }
+    }
+}
+
+impl VertexBufferLayoutDescriber for Instance {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &MODEL_INSTANCE_ATTRIBS,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct InstanceData {
+    model: [[f32; 4]; 4],
+    normal_matrix: [[f32; 3]; 3],
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct Mesh {
+    pub name: String,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_elements: u32,
+    pub material: usize,
 }
 
 pub struct Material {
@@ -88,7 +137,7 @@ impl Material {
         }
     }
 
-    fn bind_group_layout(device: &wgpu::Device, name: &str) -> wgpu::BindGroupLayout {
+    pub fn bind_group_layout(device: &wgpu::Device, name: &str) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 // Diffuse
@@ -131,12 +180,52 @@ impl Material {
     }
 }
 
-pub struct Mesh {
-    pub name: String,
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
-    pub num_elements: u32,
-    pub material: usize,
+pub struct Model {
+    pub meshes: Vec<Mesh>,
+    pub materials: Vec<Material>,
+    pub instances: Vec<Instance>,
+    instance_data: Vec<InstanceData>,
+    pub instance_buffer: wgpu::Buffer,
+}
+
+impl Model {
+    pub fn new(
+        device: &wgpu::Device,
+        meshes: Vec<Mesh>,
+        materials: Vec<Material>,
+        instances: &[Instance],
+    ) -> Self {
+        let instance_data = Self::instance_data(&instances);
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Model::instance_buffer"),
+            contents: bytemuck::cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+        Model {
+            meshes,
+            materials,
+            instances: instances.to_vec(),
+            instance_data,
+            instance_buffer,
+        }
+    }
+
+    pub fn update(&mut self, queue: &wgpu::Queue) {
+        for (instance, data) in self.instances.iter().zip(self.instance_data.iter_mut()) {
+            *data = instance.to_data();
+        }
+
+        queue.write_buffer(
+            &self.instance_buffer,
+            0,
+            bytemuck::cast_slice(&self.instance_data),
+        );
+    }
+
+    fn instance_data(instances: &[Instance]) -> Vec<InstanceData> {
+        instances.iter().map(Instance::to_data).collect()
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -230,6 +319,8 @@ where
         camera_bind_group: &'a wgpu::BindGroup,
         light_bind_group: &'a wgpu::BindGroup,
     ) {
+        self.set_vertex_buffer(1, model.instance_buffer.slice(..));
+
         for mesh in &model.meshes {
             let material = &model.materials[mesh.material];
             self.draw_mesh_instanced(
@@ -250,6 +341,7 @@ where
         camera_bind_group: &'b wgpu::BindGroup,
         light_bind_group: &'b wgpu::BindGroup,
     ) {
+        self.set_vertex_buffer(1, model.instance_buffer.slice(..));
         for mesh in &model.meshes {
             self.draw_mesh_instanced(
                 mesh,

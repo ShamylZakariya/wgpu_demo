@@ -32,11 +32,22 @@ pub async fn load_texture(
     texture::Texture::from_bytes(device, queue, &data, file_name, is_normal_map)
 }
 
+pub fn load_model_sync(
+    file_name: &str,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    instances: &[model::Instance],
+) -> anyhow::Result<model::Model> {
+    pollster::block_on(load_model(file_name, device, queue, layout, instances))
+}
+
 pub async fn load_model(
     file_name: &str,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
+    instances: &[model::Instance],
 ) -> anyhow::Result<model::Model> {
     let obj_text = load_string(file_name).await?;
     let obj_cursor = Cursor::new(obj_text);
@@ -168,5 +179,5 @@ pub async fn load_model(
         })
         .collect::<Vec<_>>();
 
-    Ok(model::Model { meshes, materials })
+    Ok(model::Model::new(device, meshes, materials, instances))
 }
