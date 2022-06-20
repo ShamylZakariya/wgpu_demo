@@ -155,9 +155,9 @@ impl app::AppState for Scene {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
-                                g: 0.2,
+                                g: 0.1,
                                 r: 0.1,
-                                b: 0.3,
+                                b: 0.1,
                                 a: 1.0,
                             }),
                             store: true,
@@ -175,15 +175,8 @@ impl app::AppState for Scene {
             });
 
             if let Some(pipeline) = self.gpu_state.pipeline_vendor.get_pipeline(PIPELINE_MODEL) {
-                use model::DrawModel;
-
                 render_pass.set_pipeline(pipeline);
-                render_pass.draw_model_instanced(
-                    &self.model,
-                    0..self.model.instances.len() as u32,
-                    &self.camera.bind_group,
-                    &self.light.bind_group,
-                );
+                model::draw_model(&mut render_pass, &self.model, &self.camera, &self.light);
             }
         }
 
