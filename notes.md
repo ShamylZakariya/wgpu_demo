@@ -46,4 +46,6 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-
+- need to make Model have bind_group_layout and bind_group. Some models might have, e.g., diffuse/normal/specular, some just diffuse
+- the model should be able to vend its vertex layout
+- need to make Model know how to draw itself into a render_pass. This trait thing is weird.

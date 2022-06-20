@@ -1,10 +1,6 @@
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
-use super::{
-    app, camera, gpu_state, light,
-    model::{self, VertexBufferLayoutDescriber},
-    texture,
-};
+use super::{app, camera, gpu_state, light, model, texture};
 
 //////////////////////////////////////////////
 
@@ -63,7 +59,7 @@ impl Scene {
                 &layout,
                 gpu_state.config.format,
                 Some(texture::Texture::DEPTH_FORMAT),
-                &[model::ModelVertex::desc(), model::Instance::desc()],
+                &model::Model::vertex_layout(),
                 shader,
             )
         };

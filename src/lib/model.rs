@@ -9,10 +9,6 @@ use super::texture;
 static MODEL_VERTEX_ATTRIBS: [wgpu::VertexAttribute; 5] = vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x3, 3 => Float32x3, 4 => Float32x3];
 static MODEL_INSTANCE_ATTRIBS: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x3, 10 => Float32x3, 11 => Float32x3, ];
 
-pub trait VertexBufferLayoutDescriber {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a>;
-}
-
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ModelVertex {
@@ -23,8 +19,8 @@ pub struct ModelVertex {
     pub bitangent: [f32; 3],
 }
 
-impl VertexBufferLayoutDescriber for ModelVertex {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+impl ModelVertex {
+    fn vertex_buffer_layout<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -61,10 +57,8 @@ impl Instance {
             normal_matrix: cgmath::Matrix3::from(self.rotation).into(),
         }
     }
-}
 
-impl VertexBufferLayoutDescriber for Instance {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+    fn vertex_buffer_layout<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
@@ -221,6 +215,10 @@ impl Model {
             0,
             bytemuck::cast_slice(&self.instance_data),
         );
+    }
+
+    pub fn vertex_layout<'a>() -> Vec<wgpu::VertexBufferLayout<'a>> {
+        vec![ModelVertex::vertex_buffer_layout(), Instance::vertex_buffer_layout()]
     }
 
     fn instance_data(instances: &[Instance]) -> Vec<InstanceData> {
