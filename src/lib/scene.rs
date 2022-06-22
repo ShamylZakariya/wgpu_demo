@@ -1,13 +1,6 @@
-use log::*;
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
-use crate::lib::resources;
-
-use super::{app, camera, gpu_state, light, model, texture};
-
-//////////////////////////////////////////////
-
-static PIPELINE_MODEL: &str = "PIPELINE_MODEL";
+use super::{app, camera, gpu_state, light, model};
 
 //////////////////////////////////////////////
 
@@ -35,39 +28,10 @@ impl Scene {
 
         let light = light::Light::new(&gpu_state.device, (2.0, 2.0, 2.0), (1.0, 1.0, 1.0));
 
-        let _ = {
-            warn!("Using the first material to create pipeline. We can do better");
-            let material = model.materials.first().unwrap();
-
-            let layout = gpu_state
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some(PIPELINE_MODEL),
-                    bind_group_layouts: &[
-                        &material.bind_group_layout,
-                        &camera::CameraController::bind_group_layout(&gpu_state.device),
-                        &light::Light::bind_group_layout(&gpu_state.device),
-                    ],
-                    push_constant_ranges: &[],
-                });
-
-            let shader_source = resources::load_string_sync(material.shader()).unwrap();
-
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("ModelPipeline Shader"),
-                source: wgpu::ShaderSource::Wgsl(shader_source.into()),
-            };
-
-            gpu_state.pipeline_vendor.create_render_pipeline(
-                PIPELINE_MODEL,
-                &gpu_state.device,
-                &layout,
-                gpu_state.config.format,
-                Some(texture::Texture::DEPTH_FORMAT),
-                &model::Model::vertex_layout(),
-                shader,
-            )
-        };
+        // create a pipeline (if needed) for each material
+        for material in model.materials.iter() {
+            material.prepare_pipeline(&mut gpu_state);
+        }
 
         Self {
             gpu_state,
@@ -179,10 +143,13 @@ impl app::AppState for Scene {
                 }),
             });
 
-            if let Some(pipeline) = self.gpu_state.pipeline_vendor.get_pipeline(PIPELINE_MODEL) {
-                render_pass.set_pipeline(pipeline);
-                model::draw_model(&mut render_pass, &self.model, &self.camera, &self.light);
-            }
+            model::draw_model(
+                &mut render_pass,
+                &self.gpu_state.pipeline_vendor,
+                &self.model,
+                &self.camera,
+                &self.light,
+            );
         }
 
         self.gpu_state

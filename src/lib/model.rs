@@ -1,6 +1,8 @@
 use wgpu::{util::DeviceExt, vertex_attr_array};
 
-use super::{camera, light, texture};
+use super::{
+    camera, gpu_state::GpuState, light, render_pipeline::RenderPipelineVendor, resources, texture,
+};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -159,6 +161,39 @@ impl Material {
         }
     }
 
+    pub fn prepare_pipeline(&self, gpu_state: &mut GpuState) {
+        if !gpu_state.pipeline_vendor.has_pipeline(&self.id) {
+            let layout = gpu_state
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some(&self.id),
+                    bind_group_layouts: &[
+                        &self.bind_group_layout,
+                        &camera::CameraController::bind_group_layout(&gpu_state.device),
+                        &light::Light::bind_group_layout(&gpu_state.device),
+                    ],
+                    push_constant_ranges: &[],
+                });
+
+            let shader_source = resources::load_string_sync(self.shader()).unwrap();
+
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("ModelPipeline Shader"),
+                source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+            };
+
+            gpu_state.pipeline_vendor.create_render_pipeline(
+                &self.id,
+                &gpu_state.device,
+                &layout,
+                gpu_state.config.format,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &Model::vertex_layout(),
+                shader,
+            );
+        }
+    }
+
     pub fn shader(&self) -> &'static str {
         match (
             &self.diffuse_texture,
@@ -168,7 +203,7 @@ impl Material {
             (Some(_), None, None) => "shaders/diffuse.wgsl",
             (Some(_), Some(_), None) => "shaders/diffuse_normal.wgsl",
             (Some(_), Some(_), Some(_)) => "shaders/diffuse_normal_shininess.wgsl",
-            _ => unimplemented!("Material::shader doesn't support textures specified"),
+            _ => unimplemented!("Material::shader doesn't support texture conbination specified"),
         }
     }
 
@@ -269,22 +304,31 @@ impl Model {
 
 pub fn draw_model<'a, 'b>(
     render_pass: &'b mut wgpu::RenderPass<'a>,
+    pipeline_vendor: &'a RenderPipelineVendor,
     model: &'a Model,
     camera: &'a camera::CameraController,
     light: &'a light::Light,
 ) where
     'a: 'b, // 'a lifetime at least as long as 'b
 {
-    render_pass.set_vertex_buffer(1, model.instance_buffer.slice(..));
     let instances = 0..model.instances.len() as u32;
     for mesh in &model.meshes {
         let material = &model.materials[mesh.material];
 
-        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        render_pass.set_bind_group(0, &material.bind_group, &[]);
-        render_pass.set_bind_group(1, &camera.bind_group, &[]);
-        render_pass.set_bind_group(2, &light.bind_group, &[]);
-        render_pass.draw_indexed(0..mesh.num_elements, 0, instances.clone());
+        if let Some(pipeline) = pipeline_vendor.get_pipeline(&material.id) {
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, model.instance_buffer.slice(..));
+            render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.set_bind_group(0, &material.bind_group, &[]);
+            render_pass.set_bind_group(1, &camera.bind_group, &[]);
+            render_pass.set_bind_group(2, &light.bind_group, &[]);
+            render_pass.draw_indexed(0..mesh.num_elements, 0, instances.clone());
+        } else {
+            eprintln!(
+                "No pipeline available to render material id: {}",
+                material.id
+            );
+        }
     }
 }
