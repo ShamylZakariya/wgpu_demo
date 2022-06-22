@@ -4,7 +4,11 @@ use wgpu::util::DeviceExt;
 
 use super::{model, texture};
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////
+
+pub fn load_string_sync(file_name: &str) -> anyhow::Result<String> {
+    pollster::block_on(load_string(file_name))
+}
 
 pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
     let path = std::path::Path::new(env!("OUT_DIR"))
@@ -36,17 +40,15 @@ pub fn load_model_sync(
     file_name: &str,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    layout: &wgpu::BindGroupLayout,
     instances: &[model::Instance],
 ) -> anyhow::Result<model::Model> {
-    pollster::block_on(load_model(file_name, device, queue, layout, instances))
+    pollster::block_on(load_model(file_name, device, queue, instances))
 }
 
 pub async fn load_model(
     file_name: &str,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    layout: &wgpu::BindGroupLayout,
     instances: &[model::Instance],
 ) -> anyhow::Result<model::Model> {
     let obj_text = load_string(file_name).await?;
@@ -69,14 +71,22 @@ pub async fn load_model(
 
     let mut materials = Vec::new();
     for m in obj_materials? {
-        let diffuse_texture = load_texture(&m.diffuse_texture, device, queue, false).await?;
-        let normal_texture = load_texture(&m.normal_texture, device, queue, true).await?;
+        let diffuse_texture = load_texture(&m.diffuse_texture, device, queue, false)
+            .await
+            .ok();
+        let normal_texture = load_texture(&m.normal_texture, device, queue, true)
+            .await
+            .ok();
+        let shininess_texture = load_texture(&m.shininess_texture, device, queue, false)
+            .await
+            .ok();
+
         materials.push(model::Material::new(
             device,
             &m.name,
             diffuse_texture,
             normal_texture,
-            layout,
+            shininess_texture,
         ));
     }
 

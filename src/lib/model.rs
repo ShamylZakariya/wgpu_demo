@@ -84,91 +84,129 @@ pub struct Mesh {
 
 pub struct Material {
     pub name: String,
-    pub diffuse_texture: texture::Texture,
-    pub normal_texture: texture::Texture,
+    pub diffuse_texture: Option<texture::Texture>,
+    pub normal_texture: Option<texture::Texture>,
+    pub shininess_texture: Option<texture::Texture>,
+    pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,
+    pub id: String,
 }
 
 impl Material {
     pub fn new(
         device: &wgpu::Device,
         name: &str,
-        diffuse_texture: texture::Texture,
-        normal_texture: texture::Texture,
-        layout: &wgpu::BindGroupLayout,
+        diffuse_texture: Option<texture::Texture>,
+        normal_texture: Option<texture::Texture>,
+        shininess_texture: Option<texture::Texture>,
     ) -> Self {
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout,
-            entries: &[
-                // Diffuse
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                },
-                // Normal
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&normal_texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&normal_texture.sampler),
-                },
-            ],
+        let mut bind_group_layout_entries = Vec::new();
+        let mut bind_group_entries = Vec::new();
+        let mut offset = 0u32;
+        let mut id = String::new();
+
+        if let Some(texture) = &diffuse_texture {
+            id = format!("(diffuse-{})", offset);
+            offset += Self::create_bind_groups_for(
+                texture,
+                offset,
+                &mut bind_group_layout_entries,
+                &mut bind_group_entries,
+            );
+        }
+
+        if let Some(texture) = &normal_texture {
+            id = format!("{}(normal-{})", id, offset);
+            offset += Self::create_bind_groups_for(
+                texture,
+                offset,
+                &mut bind_group_layout_entries,
+                &mut bind_group_entries,
+            );
+        }
+
+        if let Some(texture) = &shininess_texture {
+            id = format!("{}(shininess-{})", id, offset);
+            Self::create_bind_groups_for(
+                texture,
+                offset,
+                &mut bind_group_layout_entries,
+                &mut bind_group_entries,
+            );
+        }
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &bind_group_layout_entries,
             label: Some(name),
         });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
+            entries: &bind_group_entries,
+            label: Some(name),
+        });
+
+        println!("Material id: {id}");
+
         Self {
             name: name.into(),
             diffuse_texture,
             normal_texture,
+            shininess_texture,
             bind_group,
+            bind_group_layout,
+            id,
         }
     }
 
-    pub fn bind_group_layout(device: &wgpu::Device, name: &str) -> wgpu::BindGroupLayout {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                // Diffuse
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                // Normal
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-            label: Some(name),
-        })
+    pub fn shader(&self) -> &'static str {
+        match (
+            &self.diffuse_texture,
+            &self.normal_texture,
+            &self.shininess_texture,
+        ) {
+            (Some(_), None, None) => "shaders/diffuse.wgsl",
+            (Some(_), Some(_), None) => "shaders/diffuse_normal.wgsl",
+            (Some(_), Some(_), Some(_)) => "shaders/diffuse_normal_shininess.wgsl",
+            _ => unimplemented!("Material::shader doesn't support textures specified"),
+        }
+    }
+
+    fn create_bind_groups_for<'a: 'b, 'b>(
+        texture: &'a texture::Texture,
+        offset: u32,
+        bind_group_layout_entries: &'b mut Vec<wgpu::BindGroupLayoutEntry>,
+        bind_group_entries: &'b mut Vec<wgpu::BindGroupEntry<'a>>,
+    ) -> u32 {
+        bind_group_layout_entries.push(wgpu::BindGroupLayoutEntry {
+            binding: offset,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                multisampled: false,
+                view_dimension: wgpu::TextureViewDimension::D2,
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            },
+            count: None,
+        });
+
+        bind_group_entries.push(wgpu::BindGroupEntry {
+            binding: offset,
+            resource: wgpu::BindingResource::TextureView(&texture.view),
+        });
+
+        bind_group_layout_entries.push(wgpu::BindGroupLayoutEntry {
+            binding: offset + 1,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        });
+
+        bind_group_entries.push(wgpu::BindGroupEntry {
+            binding: offset + 1,
+            resource: wgpu::BindingResource::Sampler(&texture.sampler),
+        });
+
+        2
     }
 }
 

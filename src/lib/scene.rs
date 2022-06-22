@@ -1,4 +1,7 @@
+use log::*;
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
+
+use crate::lib::resources;
 
 use super::{app, camera, gpu_state, light, model, texture};
 
@@ -33,24 +36,26 @@ impl Scene {
         let light = light::Light::new(&gpu_state.device, (2.0, 2.0, 2.0), (1.0, 1.0, 1.0));
 
         let _ = {
+            warn!("Using the first material to create pipeline. We can do better");
+            let material = model.materials.first().unwrap();
+
             let layout = gpu_state
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some(PIPELINE_MODEL),
                     bind_group_layouts: &[
-                        &model::Material::bind_group_layout(
-                            &gpu_state.device,
-                            "ModelPipeline Material Bind Group Layout",
-                        ),
+                        &material.bind_group_layout,
                         &camera::CameraController::bind_group_layout(&gpu_state.device),
                         &light::Light::bind_group_layout(&gpu_state.device),
                     ],
                     push_constant_ranges: &[],
                 });
 
+            let shader_source = resources::load_string_sync(material.shader()).unwrap();
+
             let shader = wgpu::ShaderModuleDescriptor {
                 label: Some("ModelPipeline Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("model.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(shader_source.into()),
             };
 
             gpu_state.pipeline_vendor.create_render_pipeline(

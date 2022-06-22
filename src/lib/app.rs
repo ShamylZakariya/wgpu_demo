@@ -26,7 +26,6 @@ pub async fn run<F>(factory: F)
 where
     F: Fn(&winit::window::Window, GpuState) -> Scene,
 {
-    env_logger::init();
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_decorations(true)

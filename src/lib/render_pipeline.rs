@@ -6,6 +6,10 @@ pub struct RenderPipelineVendor {
 }
 
 impl RenderPipelineVendor {
+    pub fn has_pipeline(&self, named: &str) -> bool {
+        self.pipelines.contains_key(named)
+    }
+
     pub fn get_pipeline(&self, named: &str) -> Option<&wgpu::RenderPipeline> {
         self.pipelines.get(named)
     }
