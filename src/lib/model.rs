@@ -84,11 +84,27 @@ pub struct Mesh {
     pub material: usize,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct MaterialUniform {
+    ambient: [f32; 4],
+    diffuse: [f32; 4],
+    specular: [f32; 4],
+    shininess: f32,
+    _padding: [f32; 3],
+}
+
 pub struct Material {
     pub name: String,
+    pub ambient: cgmath::Vector4<f32>,
+    pub diffuse: cgmath::Vector4<f32>,
+    pub specular: cgmath::Vector4<f32>,
+    pub shininess: f32,
     pub diffuse_texture: Option<texture::Texture>,
     pub normal_texture: Option<texture::Texture>,
     pub shininess_texture: Option<texture::Texture>,
+    pub material_uniform: MaterialUniform, // represents non-texture uniforms
+    pub material_uniform_buffer: wgpu::Buffer, // represents non-texture uniforms
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,
     pub id: String,
@@ -98,15 +114,49 @@ impl Material {
     pub fn new(
         device: &wgpu::Device,
         name: &str,
+        ambient: cgmath::Vector4<f32>,
+        diffuse: cgmath::Vector4<f32>,
+        specular: cgmath::Vector4<f32>,
+        shininess: f32,
         diffuse_texture: Option<texture::Texture>,
         normal_texture: Option<texture::Texture>,
         shininess_texture: Option<texture::Texture>,
     ) -> Self {
         let mut bind_group_layout_entries = Vec::new();
         let mut bind_group_entries = Vec::new();
-        let mut offset = 0u32;
         let mut id = String::new();
 
+        let material_uniform = MaterialUniform {
+            ambient: ambient.into(),
+            diffuse: diffuse.into(),
+            specular: specular.into(),
+            shininess: shininess,
+            _padding: [0.0; 3],
+        };
+
+        let material_uniform_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Material::uniform_buffer"),
+                contents: bytemuck::cast_slice(&[material_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        bind_group_layout_entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        });
+        bind_group_entries.push(wgpu::BindGroupEntry {
+            binding: 0,
+            resource: material_uniform_buffer.as_entire_binding(),
+        });
+
+        let mut offset = 1u32;
         if let Some(texture) = &diffuse_texture {
             id = format!("(diffuse-{})", offset);
             offset += Self::create_bind_groups_for(
@@ -152,9 +202,15 @@ impl Material {
 
         Self {
             name: name.into(),
+            ambient,
+            diffuse,
+            specular,
+            shininess,
             diffuse_texture,
             normal_texture,
             shininess_texture,
+            material_uniform,
+            material_uniform_buffer,
             bind_group,
             bind_group_layout,
             id,

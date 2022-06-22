@@ -71,6 +71,10 @@ pub async fn load_model(
 
     let mut materials = Vec::new();
     for m in obj_materials? {
+        let ambient = cgmath::Vector4::new(m.ambient[0], m.ambient[1], m.ambient[2], 1.0);
+        let diffuse = cgmath::Vector4::new(m.diffuse[0], m.diffuse[1], m.diffuse[2], 1.0);
+        let specular = cgmath::Vector4::new(m.specular[0], m.specular[1], m.specular[2], 1.0);
+
         let diffuse_texture = load_texture(&m.diffuse_texture, device, queue, false)
             .await
             .ok();
@@ -84,6 +88,10 @@ pub async fn load_model(
         materials.push(model::Material::new(
             device,
             &m.name,
+            ambient,
+            diffuse,
+            specular,
+            m.shininess,
             diffuse_texture,
             normal_texture,
             shininess_texture,

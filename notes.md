@@ -48,10 +48,4 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 Step One:
 
-- Material now computes its own bind group and bind group layout.
-- But a Model can have > 1 material
-- We need a way to say, "this material needs this shader and this pipeline"
-	- can a material vend an ID for tagging a pipeline?
-	- this ID (or something similar) can be used to specify a shader (some combo of diffuse | normal | specular )
-	- THIS IS THE WAY
-- Once this all works we need to make a uniform buffer which represents constant color/etc values beyond the texture properties
+- Make a uniform buffer which represents constant color/etc values beyond the texture properties
