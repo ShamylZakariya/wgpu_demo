@@ -16,6 +16,7 @@ struct CameraUniform {
 
 struct Light {
     position: vec3<f32>;
+    ambient: vec3<f32>;
     color: vec3<f32>;
 };
 
@@ -118,7 +119,7 @@ fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let view_dir = normalize(in.tangent_view_position - in.tangent_position);
     let half_dir = normalize(view_dir + light_dir);
 
-    let ambient_strength = 0.1 * material.ambient.rgb;
+    let ambient_strength = light.ambient * material.ambient.rgb;
     let ambient_color = light.color * ambient_strength;
 
     let diffuse_strength = max(dot(tangent_normal, light_dir), 0.0);

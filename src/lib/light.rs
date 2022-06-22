@@ -6,8 +6,10 @@ use wgpu::util::DeviceExt;
 struct LightUniform {
     position: [f32; 3],
     _padding: u32, // uniforms require 16-byte (4 float field spacing)
-    color: [f32; 3],
+    ambient: [f32; 3],
     _padding2: u32,
+    color: [f32; 3],
+    _padding3: u32,
 }
 
 pub struct Light {
@@ -18,18 +20,21 @@ pub struct Light {
 }
 
 impl Light {
-    pub fn new<V>(device: &wgpu::Device, position: V, color: V) -> Self
+    pub fn new<V>(device: &wgpu::Device, position: V, color: V, ambient: V) -> Self
     where
         V: Into<Point3<f32>>,
     {
         let position: Point3<f32> = position.into();
+        let ambient: Point3<f32> = ambient.into();
         let color: Point3<f32> = color.into();
 
         let uniform = LightUniform {
             position: [position.x, position.y, position.z],
             _padding: 0,
-            color: [color.x, color.y, color.z],
+            ambient: [ambient.x, ambient.y, ambient.z],
             _padding2: 0,
+            color: [color.x, color.y, color.z],
+            _padding3: 0,
         };
 
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

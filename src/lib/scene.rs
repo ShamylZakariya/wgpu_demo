@@ -26,7 +26,12 @@ impl Scene {
 
         let camera = camera::CameraController::new(&gpu_state.device, camera, projection, 4.0, 0.4);
 
-        let light = light::Light::new(&gpu_state.device, (2.0, 2.0, 2.0), (1.0, 1.0, 1.0));
+        let light = light::Light::new(
+            &gpu_state.device,
+            (2.0, 2.0, 2.0),
+            (1.0, 1.0, 1.0),
+            (0.1, 0.0, 0.0),
+        );
 
         // create a pipeline (if needed) for each material
         for material in model.materials.iter() {
