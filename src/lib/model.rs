@@ -256,9 +256,10 @@ impl Material {
             &self.normal_texture,
             &self.shininess_texture,
         ) {
-            (Some(_), None, None) => "shaders/diffuse.wgsl",
-            (Some(_), Some(_), None) => "shaders/diffuse_normal.wgsl",
-            (Some(_), Some(_), Some(_)) => "shaders/diffuse_normal_shininess.wgsl",
+            (None, None, None) => "shaders/model/notex.wgsl",
+            (Some(_), None, None) => "shaders/model/diffuse.wgsl",
+            (Some(_), Some(_), None) => "shaders/model/diffuse_normal.wgsl",
+            (Some(_), Some(_), Some(_)) => "shaders/model/diffuse_normal_shininess.wgsl",
             _ => unimplemented!("Material::shader doesn't support texture conbination specified"),
         }
     }
