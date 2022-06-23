@@ -30,7 +30,7 @@ impl Scene {
             &gpu_state.device,
             (2.0, 2.0, 2.0),
             (1.0, 1.0, 1.0),
-            (0.1, 0.0, 0.0),
+            (0.1, 0.1, 0.1),
         );
 
         // create a pipeline (if needed) for each material

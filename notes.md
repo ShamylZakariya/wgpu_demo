@@ -25,27 +25,27 @@ I would like this to be some kind of silly demo - like a vaporwave scene - with 
 
 ## Milestones
 
-- Step One
+- Milestone One
 Refactor the final state of the wgpu tut11 app to be something I feel comfy about
 	- some way to generate a pipeline based on model/camera/instance/lighting params
 	- some clear state separation for camera lighting model etc
 
-- Step Two
+- Milestone Two
 Introduce mipmaps
 	- wgpu-mipmap had a fork which might be modern enough?
 	- alternatively, the `image` crate supports resizing, can use that to upload appropriate mips
 
-- Step Three
+- Milestone Three
 Make the scene render to texture and use a simple blitter pipeline to then display that texture
 
-- Step Four
+- Milestone Four
 Make a post process shader proof of concept
 
-- Step Five
+- Milestone Five
 Make a post processing "stack" which can ping pong between two intermediate textures
 
 ## Presently
 
-Step One:
+Milestone One:
 
-- Make a uniform buffer which represents constant color/etc values beyond the texture properties
+- display multiple models with different materials to demonstrate the multiple pipelines work

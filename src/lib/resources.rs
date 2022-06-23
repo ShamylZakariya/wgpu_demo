@@ -38,15 +38,23 @@ pub async fn load_texture(
 
 pub fn load_model_sync(
     file_name: &str,
+    material_name: Option<&str>,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     instances: &[model::Instance],
 ) -> anyhow::Result<model::Model> {
-    pollster::block_on(load_model(file_name, device, queue, instances))
+    pollster::block_on(load_model(
+        file_name,
+        material_name,
+        device,
+        queue,
+        instances,
+    ))
 }
 
 pub async fn load_model(
     file_name: &str,
+    material_name: Option<&str>,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     instances: &[model::Instance],
@@ -63,7 +71,8 @@ pub async fn load_model(
             ..Default::default()
         },
         |p| async move {
-            let mat_text = load_string(&p).await.unwrap();
+            let material_name = material_name.unwrap_or(&p);
+            let mat_text = load_string(material_name).await.unwrap();
             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
         },
     )

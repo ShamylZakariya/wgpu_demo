@@ -15,6 +15,7 @@ fn main() {
 
         let obj_model = resources::load_model_sync(
             "cube.obj",
+            Some("cobble.mtl"),
             &gpu_state.device,
             &gpu_state.queue,
             &[instance],
