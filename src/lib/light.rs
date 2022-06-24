@@ -60,7 +60,7 @@ impl Light {
         }
     }
 
-    pub fn update(&mut self, queue: &mut wgpu::Queue) {
+    pub fn update(&mut self, queue: &wgpu::Queue) {
         // Update the uniform buffer and write it
         self.uniform.position = self.position.into();
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform]));

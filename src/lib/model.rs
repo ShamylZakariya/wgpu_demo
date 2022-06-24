@@ -49,7 +49,7 @@ impl Instance {
         }
     }
 
-    fn to_data(&self) -> InstanceData {
+    fn as_data(&self) -> InstanceData {
         let model =
             cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
         InstanceData {
@@ -130,7 +130,7 @@ impl Material {
             ambient: ambient.into(),
             diffuse: diffuse.into(),
             specular: specular.into(),
-            shininess: shininess,
+            shininess,
             _padding: [0.0; 3],
         };
 
@@ -317,7 +317,7 @@ impl Model {
         materials: Vec<Material>,
         instances: &[Instance],
     ) -> Self {
-        let instance_data = Self::instance_data(&instances);
+        let instance_data = Self::instance_data(instances);
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Model::instance_buffer"),
             contents: bytemuck::cast_slice(&instance_data),
@@ -335,7 +335,7 @@ impl Model {
 
     pub fn update(&mut self, queue: &wgpu::Queue) {
         for (instance, data) in self.instances.iter().zip(self.instance_data.iter_mut()) {
-            *data = instance.to_data();
+            *data = instance.as_data();
         }
 
         queue.write_buffer(
@@ -353,7 +353,7 @@ impl Model {
     }
 
     fn instance_data(instances: &[Instance]) -> Vec<InstanceData> {
-        instances.iter().map(Instance::to_data).collect()
+        instances.iter().map(Instance::as_data).collect()
     }
 }
 

@@ -236,7 +236,7 @@ impl CameraController {
         self.projection.resize(new_size.width, new_size.height);
     }
 
-    pub fn update(&mut self, queue: &mut wgpu::Queue, dt: Duration) {
+    pub fn update(&mut self, queue: &wgpu::Queue, dt: Duration) {
         let dt = dt.as_secs_f32();
 
         // Move forward/backward and left/right

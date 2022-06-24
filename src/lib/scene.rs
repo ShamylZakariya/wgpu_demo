@@ -8,12 +8,12 @@ pub struct Scene {
     gpu_state: gpu_state::GpuState,
     camera: camera::CameraController,
     light: light::Light,
-    model: model::Model,
+    models: Vec<model::Model>,
     mouse_pressed: bool,
 }
 
 impl Scene {
-    pub fn new(mut gpu_state: gpu_state::GpuState, model: model::Model) -> Self {
+    pub fn new(mut gpu_state: gpu_state::GpuState, models: Vec<model::Model>) -> Self {
         let camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
 
         let projection = camera::Projection::new(
@@ -34,15 +34,17 @@ impl Scene {
         );
 
         // create a pipeline (if needed) for each material
-        for material in model.materials.iter() {
-            material.prepare_pipeline(&mut gpu_state);
+        for model in models.iter() {
+            for material in model.materials.iter() {
+                material.prepare_pipeline(&mut gpu_state);
+            }
         }
 
         Self {
             gpu_state,
             camera,
             light,
-            model,
+            models,
             mouse_pressed: false,
         }
     }
@@ -103,9 +105,11 @@ impl app::AppState for Scene {
     }
 
     fn update(&mut self, dt: instant::Duration) {
-        self.camera.update(&mut self.gpu_state.queue, dt);
-        self.light.update(&mut self.gpu_state.queue);
-        self.model.update(&mut self.gpu_state.queue);
+        self.camera.update(&self.gpu_state.queue, dt);
+        self.light.update(&self.gpu_state.queue);
+        for model in self.models.iter_mut() {
+            model.update(&self.gpu_state.queue);
+        }
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -148,13 +152,15 @@ impl app::AppState for Scene {
                 }),
             });
 
-            model::draw_model(
-                &mut render_pass,
-                &self.gpu_state.pipeline_vendor,
-                &self.model,
-                &self.camera,
-                &self.light,
-            );
+            for model in self.models.iter() {
+                model::draw_model(
+                    &mut render_pass,
+                    &self.gpu_state.pipeline_vendor,
+                    model,
+                    &self.camera,
+                    &self.light,
+                );
+            }
         }
 
         self.gpu_state
