@@ -25,7 +25,7 @@ I would like this to be some kind of silly demo - like a vaporwave scene - with 
 
 ## Milestones
 
-- Milestone One
+- Milestone One: DONE
 Refactor the final state of the wgpu tut11 app to be something I feel comfy about
 	- some way to generate a pipeline based on model/camera/instance/lighting params
 	- some clear state separation for camera lighting model etc
@@ -46,6 +46,8 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-Milestone One:
+Milestone Two:
 
-- display multiple models with different materials to demonstrate the multiple pipelines work
+- use `image` to render mipmaps into image buffers of some sort
+- upload them to the texture?
+	- https://github.com/jshrake/wgpu-mipmap - some newer forks use newer wgpu APIS. Can copy how they upload the mip level images
