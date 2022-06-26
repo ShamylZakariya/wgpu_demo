@@ -33,7 +33,7 @@ pub async fn load_texture(
     is_normal_map: bool,
 ) -> anyhow::Result<texture::Texture> {
     let data = load_binary(file_name).await?;
-    texture::Texture::from_bytes(device, queue, &data, file_name, is_normal_map)
+    texture::Texture::from_bytes(device, queue, &data, file_name, is_normal_map, true)
 }
 
 pub fn load_model_sync(

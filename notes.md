@@ -47,7 +47,4 @@ Make a post processing "stack" which can ping pong between two intermediate text
 ## Presently
 
 Milestone Two:
-
-- use `image` to render mipmaps into image buffers of some sort
-- upload them to the texture?
-	- https://github.com/jshrake/wgpu-mipmap - some newer forks use newer wgpu APIS. Can copy how they upload the mip level images
+	- software based mipmaps work, and seem fast enough in release

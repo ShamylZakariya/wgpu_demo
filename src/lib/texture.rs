@@ -1,6 +1,13 @@
 use anyhow::*;
 use image::GenericImageView;
 
+// CLosest power of two to `v` without exceeding `v`
+// E.g., 511 -> 256; 512 -> 512; 513 -> 512
+fn pot(v: u32) -> u32 {
+    let l = (v as f32).log(2.0).floor() as u32;
+    2u32.pow(l)
+}
+
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -16,30 +23,63 @@ impl Texture {
         bytes: &[u8],
         label: &str,
         is_normal_map: bool,
+        generate_mipmaps: bool,
     ) -> Result<Self> {
         let img = image::load_from_memory(bytes)?;
-        Self::from_image(device, queue, &img, Some(label), is_normal_map)
+
+        let dimensions = img.dimensions();
+        let pot_dimensions = (pot(dimensions.0), pot(dimensions.1));
+
+        let img = if generate_mipmaps && dimensions != pot_dimensions {
+            img.resize(
+                pot_dimensions.0,
+                pot_dimensions.1,
+                image::imageops::FilterType::CatmullRom,
+            )
+        } else {
+            img
+        };
+
+        Self::from_image(
+            device,
+            queue,
+            img,
+            Some(label),
+            is_normal_map,
+            generate_mipmaps,
+        )
     }
 
-    pub fn from_image(
+    fn from_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        img: &image::DynamicImage,
+        img: image::DynamicImage,
         label: Option<&str>,
         is_normal_map: bool,
+        generate_mipmaps: bool,
     ) -> Result<Self> {
-        let rgba = img.to_rgba8();
         let dimensions = img.dimensions();
+        let mip_levels = if generate_mipmaps {
+            (((dimensions.0.min(dimensions.1)) as f32).log(2.0).floor() as u32).max(1u32)
+        } else {
+            1
+        };
+
+        println!(
+            "from_image width: {} height: {} mip_levels: {}",
+            dimensions.0, dimensions.1, mip_levels
+        );
 
         let size = wgpu::Extent3d {
             width: dimensions.0,
             height: dimensions.1,
             depth_or_array_layers: 1,
         };
+
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
             size,
-            mip_level_count: 1,
+            mip_level_count: mip_levels,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: if is_normal_map {
@@ -50,30 +90,58 @@ impl Texture {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         });
 
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                aspect: wgpu::TextureAspect::All,
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            &rgba,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
-                rows_per_image: std::num::NonZeroU32::new(dimensions.1),
-            },
-            size,
-        );
+        let mut img = img;
+
+        for mip_level in 0..mip_levels {
+            let mip_size = img.dimensions();
+            let data = img.to_rgba8();
+
+            println!(
+                "Writing mip_level: {} mip_size: {},{}",
+                mip_level, mip_size.0, mip_size.1
+            );
+
+            queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    aspect: wgpu::TextureAspect::All,
+                    texture: &texture,
+                    mip_level: mip_level,
+                    origin: wgpu::Origin3d::ZERO,
+                },
+                &data,
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: std::num::NonZeroU32::new(4 * mip_size.0),
+                    rows_per_image: std::num::NonZeroU32::new(mip_size.1),
+                },
+                wgpu::Extent3d {
+                    width: mip_size.0,
+                    height: mip_size.1,
+                    depth_or_array_layers: 1,
+                },
+            );
+
+            img = img.resize_exact(
+                img.dimensions().0 / 2,
+                img.dimensions().1 / 2,
+                image::imageops::FilterType::Triangle,
+            );
+        }
+
+        let filter_mode = if generate_mipmaps {
+            wgpu::FilterMode::Linear
+        } else {
+            wgpu::FilterMode::Nearest
+        };
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: filter_mode,
+            min_filter: filter_mode,
+            mipmap_filter: filter_mode,
             ..Default::default()
         });
 
