@@ -46,5 +46,8 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-Milestone Two:
-	- software based mipmaps work, and seem fast enough in release
+Cleanups?
+
+	- veirfy correct behavior if mipmaps are disabled
+	- clippy says we have functions with too many arguments. Make a params struct with ..Default() spread?
+	- ???

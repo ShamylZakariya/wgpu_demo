@@ -31,9 +31,17 @@ pub async fn load_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     is_normal_map: bool,
+    generate_mipmaps: bool,
 ) -> anyhow::Result<texture::Texture> {
     let data = load_binary(file_name).await?;
-    texture::Texture::from_bytes(device, queue, &data, file_name, is_normal_map, true)
+    texture::Texture::from_bytes(
+        device,
+        queue,
+        &data,
+        file_name,
+        is_normal_map,
+        generate_mipmaps,
+    )
 }
 
 pub fn load_model_sync(
@@ -42,6 +50,7 @@ pub fn load_model_sync(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     instances: &[model::Instance],
+    generate_mipmaps: bool,
 ) -> anyhow::Result<model::Model> {
     pollster::block_on(load_model(
         file_name,
@@ -49,6 +58,7 @@ pub fn load_model_sync(
         device,
         queue,
         instances,
+        generate_mipmaps,
     ))
 }
 
@@ -58,6 +68,7 @@ pub async fn load_model(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     instances: &[model::Instance],
+    generate_mipmaps: bool,
 ) -> anyhow::Result<model::Model> {
     let obj_text = load_string(file_name).await?;
     let obj_cursor = Cursor::new(obj_text);
@@ -84,15 +95,17 @@ pub async fn load_model(
         let diffuse = cgmath::Vector4::new(m.diffuse[0], m.diffuse[1], m.diffuse[2], 1.0);
         let specular = cgmath::Vector4::new(m.specular[0], m.specular[1], m.specular[2], 1.0);
 
-        let diffuse_texture = load_texture(&m.diffuse_texture, device, queue, false)
+        let diffuse_texture =
+            load_texture(&m.diffuse_texture, device, queue, false, generate_mipmaps)
+                .await
+                .ok();
+        let normal_texture = load_texture(&m.normal_texture, device, queue, true, generate_mipmaps)
             .await
             .ok();
-        let normal_texture = load_texture(&m.normal_texture, device, queue, true)
-            .await
-            .ok();
-        let shininess_texture = load_texture(&m.shininess_texture, device, queue, false)
-            .await
-            .ok();
+        let shininess_texture =
+            load_texture(&m.shininess_texture, device, queue, false, generate_mipmaps)
+                .await
+                .ok();
 
         materials.push(model::Material::new(
             device,

@@ -27,7 +27,7 @@ impl RenderPipelineVendor {
         let shader = device.create_shader_module(&shader);
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
+            label: Some(&format!("Render Pipeline: {}", named)),
             layout: Some(layout),
             vertex: wgpu::VertexState {
                 module: &shader,

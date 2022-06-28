@@ -24,6 +24,7 @@ where
         &gpu_state.device,
         &gpu_state.queue,
         &[instance],
+        true,
     )
     .unwrap()
 }

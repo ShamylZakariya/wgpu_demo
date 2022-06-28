@@ -65,11 +65,6 @@ impl Texture {
             1
         };
 
-        println!(
-            "from_image width: {} height: {} mip_levels: {}",
-            dimensions.0, dimensions.1, mip_levels
-        );
-
         let size = wgpu::Extent3d {
             width: dimensions.0,
             height: dimensions.1,
@@ -91,15 +86,17 @@ impl Texture {
         });
 
         let mut img = img;
-
         for mip_level in 0..mip_levels {
+            if mip_level > 0 {
+                img = img.resize_exact(
+                    img.dimensions().0 / 2,
+                    img.dimensions().1 / 2,
+                    image::imageops::FilterType::Triangle,
+                );
+            }
+
             let mip_size = img.dimensions();
             let data = img.to_rgba8();
-
-            println!(
-                "Writing mip_level: {} mip_size: {},{}",
-                mip_level, mip_size.0, mip_size.1
-            );
 
             queue.write_texture(
                 wgpu::ImageCopyTexture {
@@ -119,12 +116,6 @@ impl Texture {
                     height: mip_size.1,
                     depth_or_array_layers: 1,
                 },
-            );
-
-            img = img.resize_exact(
-                img.dimensions().0 / 2,
-                img.dimensions().1 / 2,
-                image::imageops::FilterType::Triangle,
             );
         }
 
