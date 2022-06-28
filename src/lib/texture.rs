@@ -102,7 +102,7 @@ impl Texture {
                 wgpu::ImageCopyTexture {
                     aspect: wgpu::TextureAspect::All,
                     texture: &texture,
-                    mip_level: mip_level,
+                    mip_level,
                     origin: wgpu::Origin3d::ZERO,
                 },
                 &data,
