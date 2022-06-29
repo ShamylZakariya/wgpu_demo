@@ -98,7 +98,7 @@ pub struct MaterialUniform {
     _padding: [f32; 3],
 }
 
-pub struct MaterialDescriptor<'a> {
+pub struct MaterialProperties<'a> {
     pub name: &'a str,
     pub ambient: cgmath::Vector4<f32>,
     pub diffuse: cgmath::Vector4<f32>,
@@ -109,7 +109,7 @@ pub struct MaterialDescriptor<'a> {
     pub shininess_texture: Option<texture::Texture>,
 }
 
-impl<'a> Default for MaterialDescriptor<'a> {
+impl<'a> Default for MaterialProperties<'a> {
     fn default() -> Self {
         Self {
             name: Default::default(),
@@ -141,16 +141,16 @@ pub struct Material {
 }
 
 impl Material {
-    pub fn new(device: &wgpu::Device, material_descriptor: MaterialDescriptor) -> Self {
+    pub fn new(device: &wgpu::Device, properties: MaterialProperties) -> Self {
         let mut bind_group_layout_entries = Vec::new();
         let mut bind_group_entries = Vec::new();
         let mut id = String::new();
 
         let material_uniform = MaterialUniform {
-            ambient: material_descriptor.ambient.into(),
-            diffuse: material_descriptor.diffuse.into(),
-            specular: material_descriptor.specular.into(),
-            shininess: material_descriptor.shininess,
+            ambient: properties.ambient.into(),
+            diffuse: properties.diffuse.into(),
+            specular: properties.specular.into(),
+            shininess: properties.shininess,
             _padding: [0.0; 3],
         };
 
@@ -177,7 +177,7 @@ impl Material {
         });
 
         let mut offset = 1u32;
-        if let Some(texture) = &material_descriptor.diffuse_texture {
+        if let Some(texture) = &properties.diffuse_texture {
             id = format!("(diffuse-{})", offset);
             offset += Self::create_bind_groups_for(
                 texture,
@@ -187,7 +187,7 @@ impl Material {
             );
         }
 
-        if let Some(texture) = &material_descriptor.normal_texture {
+        if let Some(texture) = &properties.normal_texture {
             id = format!("{}(normal-{})", id, offset);
             offset += Self::create_bind_groups_for(
                 texture,
@@ -197,7 +197,7 @@ impl Material {
             );
         }
 
-        if let Some(texture) = &material_descriptor.shininess_texture {
+        if let Some(texture) = &properties.shininess_texture {
             id = format!("{}(shininess-{})", id, offset);
             Self::create_bind_groups_for(
                 texture,
@@ -209,26 +209,26 @@ impl Material {
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &bind_group_layout_entries,
-            label: Some(material_descriptor.name),
+            label: Some(properties.name),
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
             entries: &bind_group_entries,
-            label: Some(material_descriptor.name),
+            label: Some(properties.name),
         });
 
         println!("Material id: {id}");
 
         Self {
-            name: material_descriptor.name.to_owned(),
-            ambient: material_descriptor.ambient,
-            diffuse: material_descriptor.diffuse,
-            specular: material_descriptor.specular,
-            shininess: material_descriptor.shininess,
-            diffuse_texture: material_descriptor.diffuse_texture,
-            normal_texture: material_descriptor.normal_texture,
-            shininess_texture: material_descriptor.shininess_texture,
+            name: properties.name.to_owned(),
+            ambient: properties.ambient,
+            diffuse: properties.diffuse,
+            specular: properties.specular,
+            shininess: properties.shininess,
+            diffuse_texture: properties.diffuse_texture,
+            normal_texture: properties.normal_texture,
+            shininess_texture: properties.shininess_texture,
             material_uniform,
             material_uniform_buffer,
             bind_group,
@@ -261,7 +261,7 @@ impl Material {
             gpu_state.pipeline_vendor.create_render_pipeline(
                 &self.id,
                 &gpu_state.device,
-                render_pipeline::Features {
+                render_pipeline::Properties {
                     layout: &layout,
                     color_format: gpu_state.config.format,
                     depth_format: Some(texture::Texture::DEPTH_FORMAT),

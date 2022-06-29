@@ -109,7 +109,7 @@ pub async fn load_model(
 
         materials.push(model::Material::new(
             device,
-            model::MaterialDescriptor {
+            model::MaterialProperties {
                 name: &m.name,
                 ambient,
                 diffuse,

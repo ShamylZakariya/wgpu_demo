@@ -30,7 +30,7 @@ Refactor the final state of the wgpu tut11 app to be something I feel comfy abou
 	- some way to generate a pipeline based on model/camera/instance/lighting params
 	- some clear state separation for camera lighting model etc
 
-- Milestone Two
+- Milestone Two: DONE
 Introduce mipmaps
 	- wgpu-mipmap had a fork which might be modern enough?
 	- alternatively, the `image` crate supports resizing, can use that to upload appropriate mips
@@ -46,8 +46,7 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-Cleanups?
+WE NEED A BETTER CAMERA CONTROLLER THIS ONE SUCKS
 
-	- veirfy correct behavior if mipmaps are disabled
-	- clippy says we have functions with too many arguments. Make a params struct with ..Default() spread?
-	- ???
+Milestone Three
+Should Scene just draw solid pass stuff and have a second thing which draws filter passes?
