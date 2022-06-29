@@ -109,14 +109,16 @@ pub async fn load_model(
 
         materials.push(model::Material::new(
             device,
-            &m.name,
-            ambient,
-            diffuse,
-            specular,
-            m.shininess,
-            diffuse_texture,
-            normal_texture,
-            shininess_texture,
+            model::MaterialDescriptor {
+                name: &m.name,
+                ambient,
+                diffuse,
+                specular,
+                shininess: m.shininess,
+                diffuse_texture,
+                normal_texture,
+                shininess_texture,
+            },
         ));
     }
 

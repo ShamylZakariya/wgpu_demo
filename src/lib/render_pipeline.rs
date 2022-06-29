@@ -1,5 +1,13 @@
 use std::collections::HashMap;
 
+pub struct Features<'a> {
+    pub layout: &'a wgpu::PipelineLayout,
+    pub color_format: wgpu::TextureFormat,
+    pub depth_format: Option<wgpu::TextureFormat>,
+    pub vertex_layouts: &'a [wgpu::VertexBufferLayout<'a>],
+    pub shader: wgpu::ShaderModuleDescriptor<'a>,
+}
+
 #[derive(Default)]
 pub struct RenderPipelineVendor {
     pipelines: HashMap<String, wgpu::RenderPipeline>,
@@ -18,27 +26,23 @@ impl RenderPipelineVendor {
         &mut self,
         named: &str,
         device: &wgpu::Device,
-        layout: &wgpu::PipelineLayout,
-        color_format: wgpu::TextureFormat,
-        depth_format: Option<wgpu::TextureFormat>,
-        vertex_layouts: &[wgpu::VertexBufferLayout],
-        shader: wgpu::ShaderModuleDescriptor,
+        features: Features,
     ) -> &wgpu::RenderPipeline {
-        let shader = device.create_shader_module(&shader);
+        let shader = device.create_shader_module(&features.shader);
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(&format!("Render Pipeline: {}", named)),
-            layout: Some(layout),
+            layout: Some(features.layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: vertex_layouts,
+                buffers: features.vertex_layouts,
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[wgpu::ColorTargetState {
-                    format: color_format,
+                    format: features.color_format,
                     blend: Some(wgpu::BlendState {
                         alpha: wgpu::BlendComponent::REPLACE,
                         color: wgpu::BlendComponent::REPLACE,
@@ -55,7 +59,7 @@ impl RenderPipelineVendor {
                 unclipped_depth: false,
                 conservative: false,
             },
-            depth_stencil: depth_format.map(|format| wgpu::DepthStencilState {
+            depth_stencil: features.depth_format.map(|format| wgpu::DepthStencilState {
                 format,
                 depth_write_enabled: true,
                 depth_compare: wgpu::CompareFunction::Less,

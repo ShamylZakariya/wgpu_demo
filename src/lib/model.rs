@@ -1,7 +1,11 @@
 use wgpu::{util::DeviceExt, vertex_attr_array};
 
 use super::{
-    camera, gpu_state::GpuState, light, render_pipeline::RenderPipelineVendor, resources, texture,
+    camera,
+    gpu_state::GpuState,
+    light,
+    render_pipeline::{self, RenderPipelineVendor},
+    resources, texture,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -94,6 +98,32 @@ pub struct MaterialUniform {
     _padding: [f32; 3],
 }
 
+pub struct MaterialDescriptor<'a> {
+    pub name: &'a str,
+    pub ambient: cgmath::Vector4<f32>,
+    pub diffuse: cgmath::Vector4<f32>,
+    pub specular: cgmath::Vector4<f32>,
+    pub shininess: f32,
+    pub diffuse_texture: Option<texture::Texture>,
+    pub normal_texture: Option<texture::Texture>,
+    pub shininess_texture: Option<texture::Texture>,
+}
+
+impl<'a> Default for MaterialDescriptor<'a> {
+    fn default() -> Self {
+        Self {
+            name: Default::default(),
+            ambient: cgmath::Vector4::new(1.0, 1.0, 1.0, 1.0),
+            diffuse: cgmath::Vector4::new(1.0, 1.0, 1.0, 1.0),
+            specular: cgmath::Vector4::new(1.0, 1.0, 1.0, 1.0),
+            shininess: 1.0,
+            diffuse_texture: None,
+            normal_texture: None,
+            shininess_texture: None,
+        }
+    }
+}
+
 pub struct Material {
     pub name: String,
     pub ambient: cgmath::Vector4<f32>,
@@ -111,26 +141,16 @@ pub struct Material {
 }
 
 impl Material {
-    pub fn new(
-        device: &wgpu::Device,
-        name: &str,
-        ambient: cgmath::Vector4<f32>,
-        diffuse: cgmath::Vector4<f32>,
-        specular: cgmath::Vector4<f32>,
-        shininess: f32,
-        diffuse_texture: Option<texture::Texture>,
-        normal_texture: Option<texture::Texture>,
-        shininess_texture: Option<texture::Texture>,
-    ) -> Self {
+    pub fn new(device: &wgpu::Device, material_descriptor: MaterialDescriptor) -> Self {
         let mut bind_group_layout_entries = Vec::new();
         let mut bind_group_entries = Vec::new();
         let mut id = String::new();
 
         let material_uniform = MaterialUniform {
-            ambient: ambient.into(),
-            diffuse: diffuse.into(),
-            specular: specular.into(),
-            shininess,
+            ambient: material_descriptor.ambient.into(),
+            diffuse: material_descriptor.diffuse.into(),
+            specular: material_descriptor.specular.into(),
+            shininess: material_descriptor.shininess,
             _padding: [0.0; 3],
         };
 
@@ -157,7 +177,7 @@ impl Material {
         });
 
         let mut offset = 1u32;
-        if let Some(texture) = &diffuse_texture {
+        if let Some(texture) = &material_descriptor.diffuse_texture {
             id = format!("(diffuse-{})", offset);
             offset += Self::create_bind_groups_for(
                 texture,
@@ -167,7 +187,7 @@ impl Material {
             );
         }
 
-        if let Some(texture) = &normal_texture {
+        if let Some(texture) = &material_descriptor.normal_texture {
             id = format!("{}(normal-{})", id, offset);
             offset += Self::create_bind_groups_for(
                 texture,
@@ -177,7 +197,7 @@ impl Material {
             );
         }
 
-        if let Some(texture) = &shininess_texture {
+        if let Some(texture) = &material_descriptor.shininess_texture {
             id = format!("{}(shininess-{})", id, offset);
             Self::create_bind_groups_for(
                 texture,
@@ -189,26 +209,26 @@ impl Material {
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &bind_group_layout_entries,
-            label: Some(name),
+            label: Some(material_descriptor.name),
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
             entries: &bind_group_entries,
-            label: Some(name),
+            label: Some(material_descriptor.name),
         });
 
         println!("Material id: {id}");
 
         Self {
-            name: name.into(),
-            ambient,
-            diffuse,
-            specular,
-            shininess,
-            diffuse_texture,
-            normal_texture,
-            shininess_texture,
+            name: material_descriptor.name.to_owned(),
+            ambient: material_descriptor.ambient,
+            diffuse: material_descriptor.diffuse,
+            specular: material_descriptor.specular,
+            shininess: material_descriptor.shininess,
+            diffuse_texture: material_descriptor.diffuse_texture,
+            normal_texture: material_descriptor.normal_texture,
+            shininess_texture: material_descriptor.shininess_texture,
             material_uniform,
             material_uniform_buffer,
             bind_group,
@@ -241,11 +261,13 @@ impl Material {
             gpu_state.pipeline_vendor.create_render_pipeline(
                 &self.id,
                 &gpu_state.device,
-                &layout,
-                gpu_state.config.format,
-                Some(texture::Texture::DEPTH_FORMAT),
-                &Model::vertex_layout(),
-                shader,
+                render_pipeline::Features {
+                    layout: &layout,
+                    color_format: gpu_state.config.format,
+                    depth_format: Some(texture::Texture::DEPTH_FORMAT),
+                    vertex_layouts: &Model::vertex_layout(),
+                    shader,
+                },
             );
         }
     }
