@@ -231,9 +231,8 @@ impl CameraController {
     }
 
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
-        self.zoom = -match delta {
-            // I'm assuming a line is about 100 pixels
-            MouseScrollDelta::LineDelta(_, scroll) => scroll * 100.0,
+        self.zoom += match delta {
+            MouseScrollDelta::LineDelta(_, scroll) => *scroll * 20. as f32,
             MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => *scroll as f32,
         };
     }
@@ -244,8 +243,6 @@ impl CameraController {
 
     pub fn update(&mut self, queue: &wgpu::Queue, dt: Duration) {
         let dt = dt.as_secs_f32();
-
-        println!("zoom: {}", self.zoom);
 
         // Update camera position
         let linear_vel = self.speed * dt;
@@ -274,6 +271,11 @@ impl CameraController {
         // Zero out mouse motion
         self.mouse_horizontal = 0.0;
         self.mouse_vertical = 0.0;
+
+        // Update Field of View
+        let zoom = self.zoom.min(100f32).max(-100f32) / 100f32;
+        let fov = Deg(45.) + Deg(zoom * 30f32);
+        self.projection.fovy = fov.into();
 
         // Update the uniform buffer and write it
         self.uniform_data
