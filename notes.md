@@ -36,12 +36,16 @@ Introduce mipmaps
 	- alternatively, the `image` crate supports resizing, can use that to upload appropriate mips
 
 - Milestone Three
-Make the scene render to texture and use a simple blitter pipeline to then display that texture
+Use multipass rendering to support N lights.
+	- Should be possible with just extra pipelines in a single render pass since RenderPipelineDescriptor supports blend funcs
 
 - Milestone Four
-Make a post process shader proof of concept
+Make the scene render to texture and use a simple blitter pipeline to then display that texture
 
 - Milestone Five
+Make a post process shader proof of concept
+
+- Milestone Six
 Make a post processing "stack" which can ping pong between two intermediate textures
 
 ## Presently

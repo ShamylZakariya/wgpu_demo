@@ -1,3 +1,4 @@
+use cgmath::Deg;
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
 use super::{app, camera, gpu_state, light, model};
@@ -14,7 +15,7 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(mut gpu_state: gpu_state::GpuState, models: Vec<model::Model>) -> Self {
-        let camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
+        let camera = camera::Camera::new((0.0, 0.0, -10.0), Deg(0.), Deg(0.));
 
         let projection = camera::Projection::new(
             gpu_state.size().width,

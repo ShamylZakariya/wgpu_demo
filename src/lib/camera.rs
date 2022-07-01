@@ -1,6 +1,7 @@
 use cgmath::*;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
+use std::ops::Mul;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalPosition;
 use winit::event::*;
@@ -19,17 +20,16 @@ const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
 
 #[derive(Debug)]
 pub struct Camera {
-    pub position: Point3<f32>,
+    position: Point3<f32>,
     yaw: Rad<f32>,
     pitch: Rad<f32>,
 }
 
 impl Camera {
-    pub fn new<V, Y, P>(position: V, yaw: Y, pitch: P) -> Self
+    pub fn new<P, A>(position: P, yaw: A, pitch: A) -> Self
     where
-        V: Into<Point3<f32>>,
-        Y: Into<Rad<f32>>,
-        P: Into<Rad<f32>>,
+        P: Into<Point3<f32>>,
+        A: Into<Rad<f32>>,
     {
         Self {
             position: position.into(),
@@ -38,12 +38,18 @@ impl Camera {
         }
     }
 
-    pub fn calc_matrix(&self) -> Matrix4<f32> {
-        Matrix4::look_to_rh(
-            self.position,
-            Vector3::new(self.yaw.0.cos(), self.pitch.0.sin(), self.yaw.0.sin()).normalize(),
-            Vector3::unit_y(),
-        )
+    pub fn world_rotation(&self) -> Matrix3<f32> {
+        let yaw_rotation = Matrix3::from_axis_angle(Vector3::unit_y(), self.yaw);
+        let right = yaw_rotation[0].normalize();
+        let pitch_rotation = Matrix3::from_axis_angle(right, self.pitch);
+        pitch_rotation.mul(yaw_rotation)
+    }
+
+    pub fn view_matrix(&self) -> Matrix4<f32> {
+        let world_rotation = self.world_rotation();
+        let forward = world_rotation[2].normalize();
+        let up = world_rotation[1].normalize();
+        Matrix4::look_to_rh(self.position, forward, up)
     }
 }
 
@@ -95,7 +101,7 @@ impl CameraUniform {
 
     fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
         self.view_position = camera.position.to_homogeneous().into();
-        self.view_proj = (projection.calc_matrix() * camera.calc_matrix()).into();
+        self.view_proj = (projection.calc_matrix() * camera.view_matrix()).into();
     }
 }
 
@@ -103,15 +109,15 @@ impl CameraUniform {
 
 #[derive(Debug)]
 pub struct CameraController {
-    amount_left: f32,
-    amount_right: f32,
-    amount_forward: f32,
-    amount_backward: f32,
-    amount_up: f32,
-    amount_down: f32,
-    rotate_horizontal: f32,
-    rotate_vertical: f32,
-    scroll: f32,
+    keyboard_left: f32,
+    keyboard_right: f32,
+    keyboard_forward: f32,
+    keyboard_backward: f32,
+    keyboard_up: f32,
+    keyboard_down: f32,
+    mouse_horizontal: f32,
+    mouse_vertical: f32,
+    zoom: f32,
     speed: f32,
     sensitivity: f32,
 
@@ -149,15 +155,15 @@ impl CameraController {
         });
 
         Self {
-            amount_left: 0.0,
-            amount_right: 0.0,
-            amount_forward: 0.0,
-            amount_backward: 0.0,
-            amount_up: 0.0,
-            amount_down: 0.0,
-            rotate_horizontal: 0.0,
-            rotate_vertical: 0.0,
-            scroll: 0.0,
+            keyboard_left: 0.0,
+            keyboard_right: 0.0,
+            keyboard_forward: 0.0,
+            keyboard_backward: 0.0,
+            keyboard_up: 0.0,
+            keyboard_down: 0.0,
+            mouse_horizontal: 0.0,
+            mouse_vertical: 0.0,
+            zoom: 0.0,
             speed,
             sensitivity,
             camera,
@@ -192,27 +198,27 @@ impl CameraController {
         };
         match key {
             VirtualKeyCode::W | VirtualKeyCode::Up => {
-                self.amount_forward = amount;
+                self.keyboard_forward = amount;
                 true
             }
             VirtualKeyCode::S | VirtualKeyCode::Down => {
-                self.amount_backward = amount;
+                self.keyboard_backward = amount;
                 true
             }
             VirtualKeyCode::A | VirtualKeyCode::Left => {
-                self.amount_left = amount;
+                self.keyboard_left = amount;
                 true
             }
             VirtualKeyCode::D | VirtualKeyCode::Right => {
-                self.amount_right = amount;
+                self.keyboard_right = amount;
                 true
             }
-            VirtualKeyCode::Space => {
-                self.amount_up = amount;
+            VirtualKeyCode::E => {
+                self.keyboard_up = amount;
                 true
             }
-            VirtualKeyCode::LShift => {
-                self.amount_down = amount;
+            VirtualKeyCode::Q => {
+                self.keyboard_down = amount;
                 true
             }
             _ => false,
@@ -220,12 +226,12 @@ impl CameraController {
     }
 
     pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
-        self.rotate_horizontal = mouse_dx as f32;
-        self.rotate_vertical = mouse_dy as f32;
+        self.mouse_horizontal = mouse_dx as f32;
+        self.mouse_vertical = mouse_dy as f32;
     }
 
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
-        self.scroll = -match delta {
+        self.zoom = -match delta {
             // I'm assuming a line is about 100 pixels
             MouseScrollDelta::LineDelta(_, scroll) => scroll * 100.0,
             MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => *scroll as f32,
@@ -239,44 +245,35 @@ impl CameraController {
     pub fn update(&mut self, queue: &wgpu::Queue, dt: Duration) {
         let dt = dt.as_secs_f32();
 
-        // Move forward/backward and left/right
-        let (yaw_sin, yaw_cos) = self.camera.yaw.0.sin_cos();
-        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        self.camera.position +=
-            forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
-        self.camera.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
+        println!("zoom: {}", self.zoom);
 
-        // Move in/out (aka. "zoom")
-        // Note: this isn't an actual zoom. The camera's position
-        // changes when zooming. I've added this to make it easier
-        // to get closer to an object you want to focus on.
-        let (pitch_sin, pitch_cos) = self.camera.pitch.0.sin_cos();
-        let scrollward =
-            Vector3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
-        self.camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
-        self.scroll = 0.0;
+        // Update camera position
+        let linear_vel = self.speed * dt;
+        let mut camera_position = self.camera.position;
+        let camera_rotation = self.camera.world_rotation();
+        let camera_right = camera_rotation[0].normalize() * -1.;
+        let camera_up = camera_rotation[1].normalize();
+        let camera_forward = camera_rotation[2].normalize();
 
-        // Move up/down. Since we don't use roll, we can just
-        // modify the y coordinate directly.
-        self.camera.position.y += (self.amount_up - self.amount_down) * self.speed * dt;
+        camera_position += camera_forward * self.keyboard_forward * linear_vel;
+        camera_position -= camera_forward * self.keyboard_backward * linear_vel;
 
-        // Rotate
-        self.camera.yaw += Rad(self.rotate_horizontal) * self.sensitivity * dt;
-        self.camera.pitch += Rad(-self.rotate_vertical) * self.sensitivity * dt;
+        camera_position += camera_right * self.keyboard_right * linear_vel;
+        camera_position -= camera_right * self.keyboard_left * linear_vel;
 
-        // If process_mouse isn't called every frame, these values
-        // will not get set to zero, and the camera will rotate
-        // when moving in a non cardinal direction.
-        self.rotate_horizontal = 0.0;
-        self.rotate_vertical = 0.0;
+        camera_position += camera_up * self.keyboard_up * linear_vel;
+        camera_position -= camera_up * self.keyboard_down * linear_vel;
 
-        // Keep the camera's angle from going too high/low.
-        if self.camera.pitch < -Rad(SAFE_FRAC_PI_2) {
-            self.camera.pitch = -Rad(SAFE_FRAC_PI_2);
-        } else if self.camera.pitch > Rad(SAFE_FRAC_PI_2) {
-            self.camera.pitch = Rad(SAFE_FRAC_PI_2);
-        }
+        self.camera.position = camera_position;
+
+        // Update camera rotation
+        let angular_vel = self.sensitivity * dt;
+        self.camera.yaw += Rad(-self.mouse_horizontal) * angular_vel;
+        self.camera.pitch += Rad(-self.mouse_vertical) * angular_vel;
+
+        // Zero out mouse motion
+        self.mouse_horizontal = 0.0;
+        self.mouse_vertical = 0.0;
 
         // Update the uniform buffer and write it
         self.uniform_data
