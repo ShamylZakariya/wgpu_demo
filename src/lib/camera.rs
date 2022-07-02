@@ -47,9 +47,20 @@ impl Camera {
 
     pub fn view_matrix(&self) -> Matrix4<f32> {
         let world_rotation = self.world_rotation();
-        let forward = world_rotation[2].normalize();
-        let up = world_rotation[1].normalize();
-        Matrix4::look_to_rh(self.position, forward, up)
+        let world_rotation = Matrix4::from_cols(
+            world_rotation[0].extend(0.),
+            world_rotation[1].extend(0.),
+            world_rotation[2].extend(0.),
+            Vector4::unit_w(),
+        );
+        let world_translation = Matrix4::from_translation(self.position.to_vec());
+        let world_transform = world_translation.mul(world_rotation);
+        return world_transform.invert().unwrap();
+
+        // let world_rotation = self.world_rotation();
+        // let forward = world_rotation[2].normalize();
+        // let up = world_rotation[1].normalize();
+        // Matrix4::look_to_rh(self.position, forward, up)
     }
 }
 
@@ -248,9 +259,9 @@ impl CameraController {
         let linear_vel = self.speed * dt;
         let mut camera_position = self.camera.position;
         let camera_rotation = self.camera.world_rotation();
-        let camera_right = camera_rotation[0].normalize() * -1.;
+        let camera_right = camera_rotation[0].normalize();
         let camera_up = camera_rotation[1].normalize();
-        let camera_forward = camera_rotation[2].normalize();
+        let camera_forward = camera_rotation[2].normalize() * -1.;
 
         camera_position += camera_forward * self.keyboard_forward * linear_vel;
         camera_position -= camera_forward * self.keyboard_backward * linear_vel;
