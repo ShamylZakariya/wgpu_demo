@@ -45,7 +45,7 @@ impl Camera {
         pitch_rotation.mul(yaw_rotation)
     }
 
-    pub fn view_matrix(&self) -> Matrix4<f32> {
+    pub fn world_transform(&self) -> Matrix4<f32> {
         let world_rotation = self.world_rotation();
         let world_rotation = Matrix4::from_cols(
             world_rotation[0].extend(0.),
@@ -54,13 +54,11 @@ impl Camera {
             Vector4::unit_w(),
         );
         let world_translation = Matrix4::from_translation(self.position.to_vec());
-        let world_transform = world_translation.mul(world_rotation);
-        return world_transform.invert().unwrap();
+        world_translation.mul(world_rotation)
+    }
 
-        // let world_rotation = self.world_rotation();
-        // let forward = world_rotation[2].normalize();
-        // let up = world_rotation[1].normalize();
-        // Matrix4::look_to_rh(self.position, forward, up)
+    pub fn view_matrix(&self) -> Matrix4<f32> {
+        self.world_transform().invert().unwrap()
     }
 }
 
@@ -120,14 +118,13 @@ impl CameraUniform {
 
 #[derive(Debug)]
 pub struct CameraController {
-    keyboard_left: f32,
-    keyboard_right: f32,
+    keyboard_horizontal: f32,
     keyboard_forward: f32,
-    keyboard_backward: f32,
-    keyboard_up: f32,
-    keyboard_down: f32,
-    mouse_horizontal: f32,
-    mouse_vertical: f32,
+    keyboard_vertical: f32,
+    keyboard_yaw: f32,
+    keyboard_pitch: f32,
+    mouse_yaw: f32,
+    mouse_pitch: f32,
     zoom: f32,
     speed: f32,
     sensitivity: f32,
@@ -166,14 +163,13 @@ impl CameraController {
         });
 
         Self {
-            keyboard_left: 0.0,
-            keyboard_right: 0.0,
+            keyboard_horizontal: 0.0,
             keyboard_forward: 0.0,
-            keyboard_backward: 0.0,
-            keyboard_up: 0.0,
-            keyboard_down: 0.0,
-            mouse_horizontal: 0.0,
-            mouse_vertical: 0.0,
+            keyboard_vertical: 0.0,
+            keyboard_yaw: 0.0,
+            keyboard_pitch: 0.0,
+            mouse_yaw: 0.0,
+            mouse_pitch: 0.0,
             zoom: 0.0,
             speed,
             sensitivity,
@@ -208,28 +204,44 @@ impl CameraController {
             0.0
         };
         match key {
-            VirtualKeyCode::W | VirtualKeyCode::Up => {
+            VirtualKeyCode::W => {
                 self.keyboard_forward = amount;
                 true
             }
-            VirtualKeyCode::S | VirtualKeyCode::Down => {
-                self.keyboard_backward = amount;
+            VirtualKeyCode::S => {
+                self.keyboard_forward = -amount;
                 true
             }
-            VirtualKeyCode::A | VirtualKeyCode::Left => {
-                self.keyboard_left = amount;
+            VirtualKeyCode::A => {
+                self.keyboard_horizontal = -amount;
                 true
             }
-            VirtualKeyCode::D | VirtualKeyCode::Right => {
-                self.keyboard_right = amount;
+            VirtualKeyCode::D => {
+                self.keyboard_horizontal = amount;
                 true
             }
             VirtualKeyCode::E => {
-                self.keyboard_up = amount;
+                self.keyboard_vertical = amount;
                 true
             }
             VirtualKeyCode::Q => {
-                self.keyboard_down = amount;
+                self.keyboard_vertical = -amount;
+                true
+            }
+            VirtualKeyCode::Up => {
+                self.keyboard_pitch = -amount;
+                true
+            }
+            VirtualKeyCode::Down => {
+                self.keyboard_pitch = amount;
+                true
+            }
+            VirtualKeyCode::Left => {
+                self.keyboard_yaw = amount;
+                true
+            }
+            VirtualKeyCode::Right => {
+                self.keyboard_yaw = -amount;
                 true
             }
             _ => false,
@@ -237,8 +249,8 @@ impl CameraController {
     }
 
     pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
-        self.mouse_horizontal = mouse_dx as f32;
-        self.mouse_vertical = mouse_dy as f32;
+        self.mouse_yaw = mouse_dx as f32;
+        self.mouse_pitch = mouse_dy as f32;
     }
 
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
@@ -264,24 +276,22 @@ impl CameraController {
         let camera_forward = camera_rotation[2].normalize() * -1.;
 
         camera_position += camera_forward * self.keyboard_forward * linear_vel;
-        camera_position -= camera_forward * self.keyboard_backward * linear_vel;
-
-        camera_position += camera_right * self.keyboard_right * linear_vel;
-        camera_position -= camera_right * self.keyboard_left * linear_vel;
-
-        camera_position += camera_up * self.keyboard_up * linear_vel;
-        camera_position -= camera_up * self.keyboard_down * linear_vel;
-
+        camera_position += camera_right * self.keyboard_horizontal * linear_vel;
+        camera_position += camera_up * self.keyboard_vertical * linear_vel;
         self.camera.position = camera_position;
 
         // Update camera rotation
-        let angular_vel = self.sensitivity * dt;
-        self.camera.yaw += Rad(-self.mouse_horizontal) * angular_vel;
-        self.camera.pitch += Rad(-self.mouse_vertical) * angular_vel;
+        let mouse_angular_vel = self.sensitivity * dt;
+        self.camera.yaw += Rad(-self.mouse_yaw) * mouse_angular_vel;
+        self.camera.pitch += Rad(-self.mouse_pitch) * mouse_angular_vel;
+
+        let keyboard_angular_vel = self.speed * self.sensitivity * dt;
+        self.camera.yaw += Rad(self.keyboard_yaw) * keyboard_angular_vel;
+        self.camera.pitch += Rad(self.keyboard_pitch) * keyboard_angular_vel;
 
         // Zero out mouse motion
-        self.mouse_horizontal = 0.0;
-        self.mouse_vertical = 0.0;
+        self.mouse_yaw = 0.0;
+        self.mouse_pitch = 0.0;
 
         // Update Field of View
         let zoom = self.zoom.min(100f32).max(-100f32) / 100f32;

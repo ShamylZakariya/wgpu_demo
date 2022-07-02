@@ -38,6 +38,7 @@ Introduce mipmaps
 - Milestone Three
 Use multipass rendering to support N lights.
 	- Should be possible with just extra pipelines in a single render pass since RenderPipelineDescriptor supports blend funcs
+	- Should Scene just draw solid pass stuff and have a second thing (like a dedicated filter stack render pass) which draws filter passes?
 
 - Milestone Four
 Make the scene render to texture and use a simple blitter pipeline to then display that texture
@@ -50,7 +51,4 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-WE NEED A BETTER CAMERA CONTROLLER THIS ONE SUCKS
-
-Milestone Three
-Should Scene just draw solid pass stuff and have a second thing which draws filter passes?
+- CameraController should handle keyboard arrows as turns
