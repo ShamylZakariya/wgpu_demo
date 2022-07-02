@@ -7,3 +7,4 @@ pub mod render_pipeline;
 pub mod resources;
 pub mod scene;
 pub mod texture;
+pub mod util;

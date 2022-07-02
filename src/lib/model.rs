@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use cgmath::EuclideanSpace;
 use wgpu::{util::DeviceExt, vertex_attr_array};
 
 use super::{
@@ -6,6 +9,7 @@ use super::{
     light,
     render_pipeline::{self, RenderPipelineVendor},
     resources, texture,
+    util::color4,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -37,14 +41,14 @@ impl ModelVertex {
 
 #[derive(Copy, Clone)]
 pub struct Instance {
-    position: cgmath::Vector3<f32>,
+    position: cgmath::Point3<f32>,
     rotation: cgmath::Quaternion<f32>,
 }
 
 impl Instance {
     pub fn new<P, R>(position: P, rotation: R) -> Self
     where
-        P: Into<cgmath::Vector3<f32>>,
+        P: Into<cgmath::Point3<f32>>,
         R: Into<cgmath::Quaternion<f32>>,
     {
         Self {
@@ -54,8 +58,8 @@ impl Instance {
     }
 
     fn as_data(&self) -> InstanceData {
-        let model =
-            cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
+        let model = cgmath::Matrix4::from_translation(self.position.to_vec())
+            * cgmath::Matrix4::from(self.rotation);
         InstanceData {
             model: model.into(),
             normal_matrix: cgmath::Matrix3::from(self.rotation).into(),
@@ -64,7 +68,7 @@ impl Instance {
 
     fn vertex_buffer_layout<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<InstanceData>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &MODEL_INSTANCE_ATTRIBS,
         }
@@ -89,7 +93,7 @@ pub struct Mesh {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
 pub struct MaterialUniform {
     ambient: [f32; 4],
     diffuse: [f32; 4],
@@ -137,21 +141,22 @@ pub struct Material {
     pub material_uniform_buffer: wgpu::Buffer, // represents non-texture uniforms
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,
-    pub id: String,
+    pub ambient_pipeline_id: String,
+    pub lit_pipeline_id: String,
 }
 
 impl Material {
     pub fn new(device: &wgpu::Device, properties: MaterialProperties) -> Self {
         let mut bind_group_layout_entries = Vec::new();
         let mut bind_group_entries = Vec::new();
-        let mut id = String::new();
+        let mut base_id = String::new();
 
         let material_uniform = MaterialUniform {
-            ambient: properties.ambient.into(),
-            diffuse: properties.diffuse.into(),
-            specular: properties.specular.into(),
+            ambient: color4(properties.ambient).into(),
+            diffuse: color4(properties.diffuse).into(),
+            specular: color4(properties.specular).into(),
             shininess: properties.shininess,
-            _padding: [0.0; 3],
+            ..Default::default()
         };
 
         let material_uniform_buffer =
@@ -178,7 +183,7 @@ impl Material {
 
         let mut offset = 1u32;
         if let Some(texture) = &properties.diffuse_texture {
-            id = format!("(diffuse-{})", offset);
+            base_id = format!("(diffuse-{})", offset);
             offset += Self::create_bind_groups_for(
                 texture,
                 offset,
@@ -188,7 +193,7 @@ impl Material {
         }
 
         if let Some(texture) = &properties.normal_texture {
-            id = format!("{}(normal-{})", id, offset);
+            base_id = format!("{}(normal-{})", base_id, offset);
             offset += Self::create_bind_groups_for(
                 texture,
                 offset,
@@ -198,13 +203,17 @@ impl Material {
         }
 
         if let Some(texture) = &properties.shininess_texture {
-            id = format!("{}(shininess-{})", id, offset);
+            base_id = format!("{}(shininess-{})", base_id, offset);
             Self::create_bind_groups_for(
                 texture,
                 offset,
                 &mut bind_group_layout_entries,
                 &mut bind_group_entries,
             );
+        }
+
+        if base_id.is_empty() {
+            base_id = "untextured".to_string();
         }
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -217,8 +226,6 @@ impl Material {
             entries: &bind_group_entries,
             label: Some(properties.name),
         });
-
-        println!("Material id: {id}");
 
         Self {
             name: properties.name.to_owned(),
@@ -233,57 +240,123 @@ impl Material {
             material_uniform_buffer,
             bind_group,
             bind_group_layout,
-            id,
+            ambient_pipeline_id: format!("model_ambient_[{base_id}]"),
+            lit_pipeline_id: format!("model_lit_[{base_id}]"),
         }
     }
 
-    pub fn prepare_pipeline(&self, gpu_state: &mut GpuState) {
-        if !gpu_state.pipeline_vendor.has_pipeline(&self.id) {
-            let layout = gpu_state
-                .device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some(&self.id),
-                    bind_group_layouts: &[
-                        &self.bind_group_layout,
-                        &camera::CameraController::bind_group_layout(&gpu_state.device),
-                        &light::Light::bind_group_layout(&gpu_state.device),
-                    ],
-                    push_constant_ranges: &[],
-                });
+    pub fn prepare_pipelines(&self, gpu_state: &mut GpuState) {
+        for pass in vec![render_pipeline::Pass::Ambient, render_pipeline::Pass::Lit].iter() {
+            if !gpu_state
+                .pipeline_vendor
+                .has_pipeline(self.pipeline_id(pass))
+            {
+                let layout =
+                    gpu_state
+                        .device
+                        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                            label: Some(self.pipeline_id(pass)),
+                            bind_group_layouts: &[
+                                &self.bind_group_layout,
+                                &camera::CameraController::bind_group_layout(&gpu_state.device),
+                                &light::Light::bind_group_layout(&gpu_state.device),
+                            ],
+                            push_constant_ranges: &[],
+                        });
 
-            let shader_source = resources::load_string_sync(self.shader()).unwrap();
+                let shader = wgpu::ShaderModuleDescriptor {
+                    label: Some(self.shader(pass)),
+                    source: wgpu::ShaderSource::Wgsl(
+                        resources::load_string_sync(self.shader(pass))
+                            .unwrap()
+                            .into(),
+                    ),
+                };
 
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("ModelPipeline Shader"),
-                source: wgpu::ShaderSource::Wgsl(shader_source.into()),
-            };
-
-            gpu_state.pipeline_vendor.create_render_pipeline(
-                &self.id,
-                &gpu_state.device,
-                render_pipeline::Properties {
-                    layout: &layout,
-                    color_format: gpu_state.config.format,
-                    depth_format: Some(texture::Texture::DEPTH_FORMAT),
-                    vertex_layouts: &Model::vertex_layout(),
-                    shader,
-                },
-            );
+                gpu_state.pipeline_vendor.create_render_pipeline(
+                    self.pipeline_id(pass),
+                    &gpu_state.device,
+                    render_pipeline::Properties {
+                        vs_main: self.vertex_main(pass),
+                        fs_main: self.fragment_main(pass),
+                        layout: &layout,
+                        color_format: gpu_state.config.format,
+                        depth_format: Some(texture::Texture::DEPTH_FORMAT),
+                        vertex_layouts: &Model::vertex_layout(),
+                        shader,
+                        pass: *pass,
+                    },
+                );
+            }
         }
     }
 
-    pub fn shader(&self) -> &'static str {
+    pub fn pipeline_id(&self, pass: &render_pipeline::Pass) -> &str {
+        match pass {
+            render_pipeline::Pass::Ambient => &self.ambient_pipeline_id,
+            render_pipeline::Pass::Lit => &self.lit_pipeline_id,
+        }
+    }
+
+    fn vertex_main(&self, pass: &render_pipeline::Pass) -> &'static str {
+        match pass {
+            render_pipeline::Pass::Ambient => "vs_main_ambient",
+            render_pipeline::Pass::Lit => "vs_main_lit",
+        }
+    }
+
+    fn fragment_main(&self, pass: &render_pipeline::Pass) -> &'static str {
+        match pass {
+            render_pipeline::Pass::Ambient => self.ambient_fragment_main(),
+            render_pipeline::Pass::Lit => self.lit_fragment_main(),
+        }
+    }
+
+    fn shader(&self, pass: &render_pipeline::Pass) -> &'static str {
+        match pass {
+            render_pipeline::Pass::Ambient => self.ambient_shader(),
+            render_pipeline::Pass::Lit => self.lit_shader(),
+        }
+    }
+
+    fn ambient_fragment_main(&self) -> &'static str {
         match (
             &self.diffuse_texture,
             &self.normal_texture,
             &self.shininess_texture,
         ) {
-            (None, None, None) => "shaders/model/notex.wgsl",
-            (Some(_), None, None) => "shaders/model/diffuse.wgsl",
-            (Some(_), Some(_), None) => "shaders/model/diffuse_normal.wgsl",
-            (Some(_), Some(_), Some(_)) => "shaders/model/diffuse_normal_shininess.wgsl",
-            _ => unimplemented!("Material::shader doesn't support texture conbination specified"),
+            (None, None, None) => "fs_main_ambient_untextured",
+            (Some(_), _, _) => "fs_main_ambient_diffuse",
+            _ => unimplemented!(
+                "Material::ambient_fragment_main doesn't support texture conbination specified"
+            ),
         }
+    }
+
+    fn ambient_shader(&self) -> &'static str {
+        "shaders/model.wgsl"
+    }
+
+    fn lit_fragment_main(&self) -> &'static str {
+        match (
+            &self.diffuse_texture,
+            &self.normal_texture,
+            &self.shininess_texture,
+        ) {
+            (None, None, None) => "fs_main_lit_untextured",
+            (Some(_), None, None) => "fs_main_lit_diffuse",
+            (Some(_), Some(_), None) => "fs_main_lit_diffuse_normal",
+            (Some(_), Some(_), Some(_)) => "fs_main_lit_diffuse_normal_shininess",
+            _ => {
+                unimplemented!(
+                    "Material::lit_fragment_main doesn't support texture combination specified"
+                )
+            }
+        }
+    }
+
+    fn lit_shader(&self) -> &'static str {
+        "shaders/model.wgsl"
     }
 
     fn create_bind_groups_for<'a: 'b, 'b>(
@@ -325,11 +398,12 @@ impl Material {
 }
 
 pub struct Model {
-    pub meshes: Vec<Mesh>,
-    pub materials: Vec<Material>,
-    pub instances: Vec<Instance>,
+    meshes: Vec<Mesh>,
+    materials: Vec<Material>,
+    instances: Vec<Instance>,
     instance_data: Vec<InstanceData>,
-    pub instance_buffer: wgpu::Buffer,
+    is_dirty: bool,
+    instance_buffer: wgpu::Buffer,
 }
 
 impl Model {
@@ -339,7 +413,7 @@ impl Model {
         materials: Vec<Material>,
         instances: &[Instance],
     ) -> Self {
-        let instance_data = Self::instance_data(instances);
+        let instance_data: Vec<InstanceData> = instances.iter().map(Instance::as_data).collect();
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Model::instance_buffer"),
             contents: bytemuck::cast_slice(&instance_data),
@@ -351,11 +425,43 @@ impl Model {
             materials,
             instances: instances.to_vec(),
             instance_data,
+            is_dirty: true,
             instance_buffer,
         }
     }
 
+    pub fn prepare_pipelines(&self, gpu_state: &mut GpuState) {
+        for material in self.materials.iter() {
+            material.prepare_pipelines(gpu_state);
+        }
+    }
+
+    pub fn update_instance(&mut self, at: usize, to: Instance) {
+        if at < self.instances.len() {
+            self.instances[at] = to;
+            self.is_dirty = true;
+        }
+    }
+
+    pub fn update_instances(&mut self, updated_instances: &HashMap<usize, Instance>) {
+        let mut did_mutate = false;
+        for (idx, value) in updated_instances.iter() {
+            if *idx < self.instances.len() {
+                self.instances[*idx] = *value;
+                did_mutate = true;
+            }
+        }
+        if did_mutate {
+            self.is_dirty = true;
+        }
+    }
+
     pub fn update(&mut self, queue: &wgpu::Queue) {
+        if !self.is_dirty {
+            return;
+        }
+
+        // update the instance buffer in place
         for (instance, data) in self.instances.iter().zip(self.instance_data.iter_mut()) {
             *data = instance.as_data();
         }
@@ -365,6 +471,7 @@ impl Model {
             0,
             bytemuck::cast_slice(&self.instance_data),
         );
+        self.is_dirty = false;
     }
 
     pub fn vertex_layout<'a>() -> Vec<wgpu::VertexBufferLayout<'a>> {
@@ -372,10 +479,6 @@ impl Model {
             ModelVertex::vertex_buffer_layout(),
             Instance::vertex_buffer_layout(),
         ]
-    }
-
-    fn instance_data(instances: &[Instance]) -> Vec<InstanceData> {
-        instances.iter().map(Instance::as_data).collect()
     }
 }
 
@@ -387,6 +490,7 @@ pub fn draw_model<'a, 'b>(
     model: &'a Model,
     camera: &'a camera::CameraController,
     light: &'a light::Light,
+    pass: &render_pipeline::Pass,
 ) where
     'a: 'b, // 'a lifetime at least as long as 'b
 {
@@ -394,19 +498,19 @@ pub fn draw_model<'a, 'b>(
     for mesh in &model.meshes {
         let material = &model.materials[mesh.material];
 
-        if let Some(pipeline) = pipeline_vendor.get_pipeline(&material.id) {
+        if let Some(pipeline) = pipeline_vendor.get_pipeline(material.pipeline_id(pass)) {
             render_pass.set_pipeline(pipeline);
             render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, model.instance_buffer.slice(..));
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.set_bind_group(0, &material.bind_group, &[]);
-            render_pass.set_bind_group(1, &camera.bind_group, &[]);
-            render_pass.set_bind_group(2, &light.bind_group, &[]);
+            render_pass.set_bind_group(1, camera.bind_group(), &[]);
+            render_pass.set_bind_group(2, light.bind_group(), &[]);
             render_pass.draw_indexed(0..mesh.num_elements, 0, instances.clone());
         } else {
             eprintln!(
                 "No pipeline available to render material id: {}",
-                material.id
+                material.pipeline_id(pass)
             );
         }
     }

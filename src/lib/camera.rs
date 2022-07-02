@@ -123,6 +123,7 @@ pub struct CameraController {
     keyboard_vertical: f32,
     keyboard_yaw: f32,
     keyboard_pitch: f32,
+    keyboard_shift_down: bool,
     mouse_yaw: f32,
     mouse_pitch: f32,
     zoom: f32,
@@ -131,9 +132,10 @@ pub struct CameraController {
 
     camera: Camera,
     projection: Projection,
+    projection_is_dirty: bool,
     buffer: wgpu::Buffer,
     uniform_data: CameraUniform,
-    pub bind_group: wgpu::BindGroup,
+    bind_group: wgpu::BindGroup,
 }
 
 impl CameraController {
@@ -168,6 +170,7 @@ impl CameraController {
             keyboard_vertical: 0.0,
             keyboard_yaw: 0.0,
             keyboard_pitch: 0.0,
+            keyboard_shift_down: false,
             mouse_yaw: 0.0,
             mouse_pitch: 0.0,
             zoom: 0.0,
@@ -175,10 +178,15 @@ impl CameraController {
             sensitivity,
             camera,
             projection,
+            projection_is_dirty: true,
             buffer,
             uniform_data,
             bind_group,
         }
+    }
+
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        &self.bind_group
     }
 
     pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -198,10 +206,10 @@ impl CameraController {
     }
 
     pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
-        let amount = if state == ElementState::Pressed {
-            1.0
+        let (amount, pressed) = if state == ElementState::Pressed {
+            (1.0, true)
         } else {
-            0.0
+            (0.0, false)
         };
         match key {
             VirtualKeyCode::W => {
@@ -229,11 +237,11 @@ impl CameraController {
                 true
             }
             VirtualKeyCode::Up => {
-                self.keyboard_pitch = -amount;
+                self.keyboard_pitch = amount;
                 true
             }
             VirtualKeyCode::Down => {
-                self.keyboard_pitch = amount;
+                self.keyboard_pitch = -amount;
                 true
             }
             VirtualKeyCode::Left => {
@@ -242,6 +250,10 @@ impl CameraController {
             }
             VirtualKeyCode::Right => {
                 self.keyboard_yaw = -amount;
+                true
+            }
+            VirtualKeyCode::LShift => {
+                self.keyboard_shift_down = pressed;
                 true
             }
             _ => false,
@@ -255,20 +267,22 @@ impl CameraController {
 
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
         self.zoom += match delta {
-            MouseScrollDelta::LineDelta(_, scroll) => *scroll * 20. as f32,
+            MouseScrollDelta::LineDelta(_, scroll) => *scroll * 20_f32,
             MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => *scroll as f32,
         };
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         self.projection.resize(new_size.width, new_size.height);
+        self.projection_is_dirty = true;
     }
 
     pub fn update(&mut self, queue: &wgpu::Queue, dt: Duration) {
         let dt = dt.as_secs_f32();
+        let mut camera_is_dirty = false;
 
         // Update camera position
-        let linear_vel = self.speed * dt;
+        let linear_vel = self.speed * dt * if self.keyboard_shift_down { 3.0 } else { 1.0 };
         let mut camera_position = self.camera.position;
         let camera_rotation = self.camera.world_rotation();
         let camera_right = camera_rotation[0].normalize();
@@ -278,7 +292,10 @@ impl CameraController {
         camera_position += camera_forward * self.keyboard_forward * linear_vel;
         camera_position += camera_right * self.keyboard_horizontal * linear_vel;
         camera_position += camera_up * self.keyboard_vertical * linear_vel;
-        self.camera.position = camera_position;
+        if camera_position.distance2(self.camera.position) > 1e-4 {
+            self.camera.position = camera_position;
+            camera_is_dirty = true;
+        }
 
         // Update camera rotation
         let mouse_angular_vel = self.sensitivity * dt;
@@ -288,6 +305,14 @@ impl CameraController {
         let keyboard_angular_vel = self.speed * self.sensitivity * dt;
         self.camera.yaw += Rad(self.keyboard_yaw) * keyboard_angular_vel;
         self.camera.pitch += Rad(self.keyboard_pitch) * keyboard_angular_vel;
+
+        if self.mouse_yaw.abs() > 0.0
+            || self.mouse_pitch.abs() > 0.0
+            || self.keyboard_yaw.abs() > 0.0
+            || self.keyboard_pitch.abs() > 0.0
+        {
+            camera_is_dirty = true
+        }
 
         // Zero out mouse motion
         self.mouse_yaw = 0.0;
@@ -299,9 +324,12 @@ impl CameraController {
         self.projection.fovy = fov.into();
 
         // Update the uniform buffer and write it
-        self.uniform_data
-            .update_view_proj(&self.camera, &self.projection);
+        if camera_is_dirty || self.projection_is_dirty {
+            self.uniform_data
+                .update_view_proj(&self.camera, &self.projection);
 
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform_data]));
+            queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform_data]));
+            self.projection_is_dirty = false;
+        }
     }
 }
