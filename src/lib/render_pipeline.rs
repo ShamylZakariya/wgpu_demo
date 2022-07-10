@@ -1,11 +1,20 @@
 use std::collections::HashMap;
 
+#[derive(Clone, Copy, Debug)]
+pub enum Pass {
+    Ambient,
+    Lit,
+}
+
 pub struct Properties<'a> {
+    pub vs_main: &'a str,
+    pub fs_main: &'a str,
     pub layout: &'a wgpu::PipelineLayout,
     pub color_format: wgpu::TextureFormat,
     pub depth_format: Option<wgpu::TextureFormat>,
     pub vertex_layouts: &'a [wgpu::VertexBufferLayout<'a>],
     pub shader: wgpu::ShaderModuleDescriptor<'a>,
+    pub pass: Pass,
 }
 
 #[derive(Default)]
@@ -29,24 +38,37 @@ impl RenderPipelineVendor {
         properties: Properties,
     ) -> &wgpu::RenderPipeline {
         let shader = device.create_shader_module(&properties.shader);
+        let depth_write_enabled = match properties.pass {
+            Pass::Ambient => true,
+            Pass::Lit => false,
+        };
+
+        let blend_state = match properties.pass {
+            Pass::Ambient => wgpu::BlendState::REPLACE,
+            Pass::Lit => wgpu::BlendState {
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                alpha: wgpu::BlendComponent::OVER,
+            },
+        };
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(&format!("Render Pipeline: {}", named)),
+            label: Some(&format!("RenderPipeline: {}", named)),
             layout: Some(properties.layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: properties.vs_main,
                 buffers: properties.vertex_layouts,
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: properties.fs_main,
                 targets: &[wgpu::ColorTargetState {
                     format: properties.color_format,
-                    blend: Some(wgpu::BlendState {
-                        alpha: wgpu::BlendComponent::REPLACE,
-                        color: wgpu::BlendComponent::REPLACE,
-                    }),
+                    blend: Some(blend_state),
                     write_mask: wgpu::ColorWrites::ALL,
                 }],
             }),
@@ -59,13 +81,15 @@ impl RenderPipelineVendor {
                 unclipped_depth: false,
                 conservative: false,
             },
-            depth_stencil: properties.depth_format.map(|format| wgpu::DepthStencilState {
-                format,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
+            depth_stencil: properties
+                .depth_format
+                .map(|format| wgpu::DepthStencilState {
+                    format,
+                    depth_write_enabled,
+                    depth_compare: wgpu::CompareFunction::LessEqual,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
             multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,

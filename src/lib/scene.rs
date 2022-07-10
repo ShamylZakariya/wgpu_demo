@@ -1,50 +1,59 @@
-use cgmath::Deg;
+use cgmath::*;
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
-use super::{app, camera, gpu_state, light, model};
+use super::{app, camera, gpu_state, light, model, render_pipeline};
 
 //////////////////////////////////////////////
 
 pub struct Scene {
     gpu_state: gpu_state::GpuState,
-    camera: camera::CameraController,
-    light: light::Light,
+    camera_controller: camera::CameraController,
+    ambient_light: light::Light,
+    lights: Vec<light::Light>,
     models: Vec<model::Model>,
     mouse_pressed: bool,
 }
 
 impl Scene {
-    pub fn new(mut gpu_state: gpu_state::GpuState, models: Vec<model::Model>) -> Self {
-        let camera = camera::Camera::new((0.0, 0.0, -10.0), Deg(180.), Deg(0.));
-
+    pub fn new(
+        mut gpu_state: gpu_state::GpuState,
+        lights: Vec<light::Light>,
+        camera: camera::Camera,
+        models: Vec<model::Model>,
+    ) -> Self {
         let projection = camera::Projection::new(
             gpu_state.size().width,
             gpu_state.size().height,
-            cgmath::Deg(45.0),
-            0.1,
-            100.0,
+            Deg(45.0),
+            0.5,
+            500.0,
         );
 
-        let camera = camera::CameraController::new(&gpu_state.device, camera, projection, 4.0, 0.4);
-
-        let light = light::Light::new(
-            &gpu_state.device,
-            (2.0, 2.0, 2.0),
-            (1.0, 1.0, 1.0),
-            (0.1, 0.1, 0.1),
-        );
+        let camera_controller =
+            camera::CameraController::new(&gpu_state.device, camera, projection, 4.0, 0.4);
 
         // create a pipeline (if needed) for each material
         for model in models.iter() {
-            for material in model.materials.iter() {
-                material.prepare_pipeline(&mut gpu_state);
-            }
+            model.prepare_pipelines(&mut gpu_state);
         }
+
+        // Create an ambient light which is the sum of all the ambient terms of the light sources provided
+        let ambient_term = lights
+            .iter()
+            .fold(Vector3::zero(), |total, light| total + light.ambient());
+
+        let ambient_light = light::Light::new_ambient(
+            &gpu_state.device,
+            &light::AmbientLightDescriptor {
+                ambient: ambient_term,
+            },
+        );
 
         Self {
             gpu_state,
-            camera,
-            light,
+            camera_controller,
+            ambient_light,
+            lights,
             models,
             mouse_pressed: false,
         }
@@ -54,7 +63,7 @@ impl Scene {
 impl app::AppState for Scene {
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         self.gpu_state.resize(new_size);
-        self.camera.resize(new_size);
+        self.camera_controller.resize(new_size);
     }
 
     fn size(&self) -> winit::dpi::PhysicalSize<u32> {
@@ -77,10 +86,10 @@ impl app::AppState for Scene {
                         },
                     ..
                 } => {
-                    return self.camera.process_keyboard(*key, *state);
+                    return self.camera_controller.process_keyboard(*key, *state);
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
-                    self.camera.process_scroll(delta);
+                    self.camera_controller.process_scroll(delta);
                     return true;
                 }
                 WindowEvent::MouseInput {
@@ -97,7 +106,8 @@ impl app::AppState for Scene {
 
         if let Some(mouse_motion) = mouse_motion {
             if self.mouse_pressed {
-                self.camera.process_mouse(mouse_motion.0, mouse_motion.1);
+                self.camera_controller
+                    .process_mouse(mouse_motion.0, mouse_motion.1);
                 return true;
             }
         }
@@ -106,8 +116,18 @@ impl app::AppState for Scene {
     }
 
     fn update(&mut self, dt: instant::Duration) {
-        self.camera.update(&self.gpu_state.queue, dt);
-        self.light.update(&self.gpu_state.queue);
+        self.camera_controller.update(&self.gpu_state.queue, dt);
+
+        self.ambient_light.set_ambient(
+            self.lights
+                .iter()
+                .fold(Vector3::zero(), |total, light| total + light.ambient()),
+        );
+        self.ambient_light.update(&self.gpu_state.queue);
+
+        for light in self.lights.iter_mut() {
+            light.update(&self.gpu_state.queue);
+        }
         for model in self.models.iter_mut() {
             model.update(&self.gpu_state.queue);
         }
@@ -124,9 +144,11 @@ impl app::AppState for Scene {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Render Encoder"),
                 });
+
+        // Render solid passes
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
+                label: Some("Ambient Render Pass"),
                 color_attachments: &[
                     // this is output [[location(0)]]
                     wgpu::RenderPassColorAttachment {
@@ -153,14 +175,34 @@ impl app::AppState for Scene {
                 }),
             });
 
+            // Render ambient pass
             for model in self.models.iter() {
                 model::draw_model(
                     &mut render_pass,
                     &self.gpu_state.pipeline_vendor,
                     model,
-                    &self.camera,
-                    &self.light,
+                    &self.camera_controller,
+                    &self.ambient_light,
+                    &render_pipeline::Pass::Ambient,
                 );
+            }
+
+            // Render lit passes (skipping ambient since they're rolled into self.ambient_light)
+            for light in self
+                .lights
+                .iter()
+                .filter(|l| l.light_type() != light::LightType::Ambient)
+            {
+                for model in self.models.iter() {
+                    model::draw_model(
+                        &mut render_pass,
+                        &self.gpu_state.pipeline_vendor,
+                        model,
+                        &self.camera_controller,
+                        light,
+                        &render_pipeline::Pass::Lit,
+                    );
+                }
             }
         }
 

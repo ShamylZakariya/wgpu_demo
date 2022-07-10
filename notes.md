@@ -51,4 +51,34 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-- CameraController should handle keyboard arrows as turns
+wgpu 0.13 is OUT
+	- https://sotrh.github.io/learn-wgpu/news/0.13/
+	- https://github.com/gfx-rs/wgpu/blob/master/CHANGELOG.md#wgpu-013-2022-06-30
+
+Do I want a GUI?
+	- https://github.com/emilk/egui#example
+
+Milestone Three
+- multipass lighting works
+- TODO:
+	- multiple lights
+	- light types - directional, spot, point, can use a switch in fragment shader?
+		- point light works
+		- directional light works
+
+	- camera, model, light could use a is_dirty() fn to reduce calls to update()
+		- light: done
+		- camera: done
+		- model: done
+
+	- the scene constructor could probably have a callback to mutate state
+		- would be dispatched via update()
+
+- THEN:
+	- update to wgpu 0.13
+	Note: None of wgpu 0.13 demos run. Seems to be related to debug groups, timing, etc. Perhaps vulkan extensions my GPU doesn't support.
+
+- THEN
+	- camera could use a look_at function
+	- shadows!?
+	https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping
