@@ -37,7 +37,7 @@ impl RenderPipelineVendor {
         device: &wgpu::Device,
         properties: Properties,
     ) -> &wgpu::RenderPipeline {
-        let shader = device.create_shader_module(&properties.shader);
+        let shader = device.create_shader_module(properties.shader);
         let depth_write_enabled = match properties.pass {
             Pass::Ambient => true,
             Pass::Lit => false,
@@ -66,11 +66,11 @@ impl RenderPipelineVendor {
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: properties.fs_main,
-                targets: &[wgpu::ColorTargetState {
+                targets: &[Some(wgpu::ColorTargetState {
                     format: properties.color_format,
                     blend: Some(blend_state),
                     write_mask: wgpu::ColorWrites::ALL,
-                }],
+                })],
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
