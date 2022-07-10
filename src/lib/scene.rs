@@ -151,7 +151,7 @@ impl app::AppState for Scene {
                 label: Some("Ambient Render Pass"),
                 color_attachments: &[
                     // this is output [[location(0)]]
-                    wgpu::RenderPassColorAttachment {
+                    Some(wgpu::RenderPassColorAttachment {
                         view: &view,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -163,7 +163,7 @@ impl app::AppState for Scene {
                             }),
                             store: true,
                         },
-                    },
+                    }),
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.gpu_state.depth_texture.view,
