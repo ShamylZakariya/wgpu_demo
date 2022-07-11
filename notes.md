@@ -35,10 +35,9 @@ Introduce mipmaps
 	- wgpu-mipmap had a fork which might be modern enough?
 	- alternatively, the `image` crate supports resizing, can use that to upload appropriate mips
 
-- Milestone Three
+- Milestone Three: DONE
 Use multipass rendering to support N lights.
 	- Should be possible with just extra pipelines in a single render pass since RenderPipelineDescriptor supports blend funcs
-	- Should Scene just draw solid pass stuff and have a second thing (like a dedicated filter stack render pass) which draws filter passes?
 
 - Milestone Four
 Make the scene render to texture and use a simple blitter pipeline to then display that texture
@@ -51,34 +50,15 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-wgpu 0.13 is OUT
-	- https://sotrh.github.io/learn-wgpu/news/0.13/
-	- https://github.com/gfx-rs/wgpu/blob/master/CHANGELOG.md#wgpu-013-2022-06-30
-
-Do I want a GUI?
-	- https://github.com/emilk/egui#example
-
-Milestone Three
-- multipass lighting works
-- TODO:
-	- multiple lights
-	- light types - directional, spot, point, can use a switch in fragment shader?
-		- point light works
-		- directional light works
-
-	- camera, model, light could use a is_dirty() fn to reduce calls to update()
-		- light: done
-		- camera: done
-		- model: done
-
-	- the scene constructor could probably have a callback to mutate state
-		- would be dispatched via update()
-
-- THEN:
-	- update to wgpu 0.13
-	Note: None of wgpu 0.13 demos run. Seems to be related to debug groups, timing, etc. Perhaps vulkan extensions my GPU doesn't support.
+- update callback
+	to make this work effectively, we need a key/id type storage. I think we should pass hashmaps of int->model, int->light for lookup purposes
+	remember this is not an engine
+	but this owuld make life easier
 
 - THEN
 	- camera could use a look_at function
 	- shadows!?
 	https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping
+
+Do I want a GUI?
+	- https://github.com/emilk/egui#example
