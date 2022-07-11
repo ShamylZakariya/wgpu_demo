@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use cgmath::*;
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
@@ -9,17 +11,18 @@ pub struct Scene {
     gpu_state: gpu_state::GpuState,
     camera_controller: camera::CameraController,
     ambient_light: light::Light,
-    lights: Vec<light::Light>,
-    models: Vec<model::Model>,
+    pub lights: HashMap<usize, light::Light>,
+    pub models: HashMap<usize, model::Model>,
     mouse_pressed: bool,
+    time: instant::Duration,
 }
 
 impl Scene {
     pub fn new(
         mut gpu_state: gpu_state::GpuState,
-        lights: Vec<light::Light>,
         camera: camera::Camera,
-        models: Vec<model::Model>,
+        lights: HashMap<usize, light::Light>,
+        models: HashMap<usize, model::Model>,
     ) -> Self {
         let projection = camera::Projection::new(
             gpu_state.size().width,
@@ -33,13 +36,13 @@ impl Scene {
             camera::CameraController::new(&gpu_state.device, camera, projection, 4.0, 0.4);
 
         // create a pipeline (if needed) for each material
-        for model in models.iter() {
+        for model in models.values() {
             model.prepare_pipelines(&mut gpu_state);
         }
 
         // Create an ambient light which is the sum of all the ambient terms of the light sources provided
         let ambient_term = lights
-            .iter()
+            .values()
             .fold(Vector3::zero(), |total, light| total + light.ambient());
 
         let ambient_light = light::Light::new_ambient(
@@ -56,7 +59,12 @@ impl Scene {
             lights,
             models,
             mouse_pressed: false,
+            time: instant::Duration::default(),
         }
+    }
+
+    pub fn time(&self) -> instant::Duration {
+        self.time
     }
 }
 
@@ -120,17 +128,19 @@ impl app::AppState for Scene {
 
         self.ambient_light.set_ambient(
             self.lights
-                .iter()
+                .values()
                 .fold(Vector3::zero(), |total, light| total + light.ambient()),
         );
         self.ambient_light.update(&self.gpu_state.queue);
 
-        for light in self.lights.iter_mut() {
+        for light in self.lights.values_mut() {
             light.update(&self.gpu_state.queue);
         }
-        for model in self.models.iter_mut() {
+        for model in self.models.values_mut() {
             model.update(&self.gpu_state.queue);
         }
+
+        self.time += dt;
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -176,7 +186,7 @@ impl app::AppState for Scene {
             });
 
             // Render ambient pass
-            for model in self.models.iter() {
+            for model in self.models.values() {
                 model::draw_model(
                     &mut render_pass,
                     &self.gpu_state.pipeline_vendor,
@@ -190,10 +200,10 @@ impl app::AppState for Scene {
             // Render lit passes (skipping ambient since they're rolled into self.ambient_light)
             for light in self
                 .lights
-                .iter()
+                .values()
                 .filter(|l| l.light_type() != light::LightType::Ambient)
             {
-                for model in self.models.iter() {
+                for model in self.models.values() {
                     model::draw_model(
                         &mut render_pass,
                         &self.gpu_state.pipeline_vendor,

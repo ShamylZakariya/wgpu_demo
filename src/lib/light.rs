@@ -224,7 +224,7 @@ impl Light {
     pub fn set_position<P: Into<Point3<f32>>>(&mut self, position: P) {
         let new_position: Point3<f32> = position.into();
         if new_position.distance2(self.position) > EPSILON {
-            self.position = new_position.into();
+            self.position = new_position;
             self.is_dirty = true;
         }
     }
@@ -236,7 +236,7 @@ impl Light {
     pub fn set_direction<V: Into<Vector3<f32>>>(&mut self, dir: V) {
         let new_dir: Vector3<f32> = dir.into();
         if new_dir.distance2(self.direction) > EPSILON {
-            self.direction = new_dir.into();
+            self.direction = new_dir;
             self.is_dirty = true;
         }
     }
@@ -248,7 +248,7 @@ impl Light {
     pub fn set_color<V: Into<Vector3<f32>>>(&mut self, color: V) {
         let new_color: Vector3<f32> = color.into();
         if new_color.distance2(self.color) > EPSILON {
-            self.color = new_color.into();
+            self.color = new_color;
             self.is_dirty = true;
         }
     }
@@ -258,9 +258,8 @@ impl Light {
     }
 
     pub fn set_constant_attenuation(&mut self, constant_attenuation: f32) {
-        let new_constant_attenuation: f32 = constant_attenuation.into();
-        if (new_constant_attenuation - self.constant_attenuation).abs() > EPSILON {
-            self.constant_attenuation = new_constant_attenuation.into();
+        if (constant_attenuation - self.constant_attenuation).abs() > EPSILON {
+            self.constant_attenuation = constant_attenuation;
             self.is_dirty = true;
         }
     }
@@ -270,9 +269,8 @@ impl Light {
     }
 
     pub fn set_linear_attenuation(&mut self, linear_attenuation: f32) {
-        let new_linear_attenuation: f32 = linear_attenuation.into();
-        if (new_linear_attenuation - self.linear_attenuation).abs() > EPSILON {
-            self.linear_attenuation = new_linear_attenuation.into();
+        if (linear_attenuation - self.linear_attenuation).abs() > EPSILON {
+            self.linear_attenuation = linear_attenuation;
             self.is_dirty = true;
         }
     }
@@ -282,9 +280,8 @@ impl Light {
     }
 
     pub fn set_exponential_attenuation(&mut self, exponential_attenuation: f32) {
-        let new_exponential_attenuation: f32 = exponential_attenuation.into();
-        if (new_exponential_attenuation - self.exponential_attenuation).abs() > EPSILON {
-            self.exponential_attenuation = new_exponential_attenuation.into();
+        if (exponential_attenuation - self.exponential_attenuation).abs() > EPSILON {
+            self.exponential_attenuation = exponential_attenuation;
             self.is_dirty = true;
         }
     }

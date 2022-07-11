@@ -22,9 +22,10 @@ pub trait AppState {
     fn render(&mut self) -> Result<(), wgpu::SurfaceError>;
 }
 
-pub async fn run<F>(factory: F)
+pub async fn run<F, U>(factory: F, update: U)
 where
     F: Fn(&winit::window::Window, GpuState) -> Scene,
+    U: 'static + Fn(&mut Scene),
 {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
@@ -50,6 +51,7 @@ where
             let now = instant::Instant::now();
             let dt = now - last_render_time;
             last_render_time = now;
+            update(&mut scene);
             scene.update(dt);
             match scene.render() {
                 Ok(_) => {}

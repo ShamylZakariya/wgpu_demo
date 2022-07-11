@@ -50,8 +50,10 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-- the scene constructor could probably have a callback to mutate state
-	- would be dispatched via update()
+- update callback
+	to make this work effectively, we need a key/id type storage. I think we should pass hashmaps of int->model, int->light for lookup purposes
+	remember this is not an engine
+	but this owuld make life easier
 
 - THEN
 	- camera could use a look_at function
