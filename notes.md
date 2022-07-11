@@ -50,13 +50,9 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-- update callback
-	to make this work effectively, we need a key/id type storage. I think we should pass hashmaps of int->model, int->light for lookup purposes
-	remember this is not an engine
-	but this owuld make life easier
+- camera could use a look_at function
 
 - THEN
-	- camera could use a look_at function
 	- shadows!?
 	https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping
 
