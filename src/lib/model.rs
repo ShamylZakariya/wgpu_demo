@@ -258,7 +258,7 @@ impl Material {
                             label: Some(self.pipeline_id(pass)),
                             bind_group_layouts: &[
                                 &self.bind_group_layout,
-                                &camera::CameraController::bind_group_layout(&gpu_state.device),
+                                &camera::Camera::bind_group_layout(&gpu_state.device),
                                 &light::Light::bind_group_layout(&gpu_state.device),
                             ],
                             push_constant_ranges: &[],
@@ -504,7 +504,7 @@ pub fn draw_model<'a, 'b>(
             render_pass.set_vertex_buffer(1, model.instance_buffer.slice(..));
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.set_bind_group(0, &material.bind_group, &[]);
-            render_pass.set_bind_group(1, camera.bind_group(), &[]);
+            render_pass.set_bind_group(1, camera.camera().bind_group(), &[]);
             render_pass.set_bind_group(2, light.bind_group(), &[]);
             render_pass.draw_indexed(0..mesh.num_elements, 0, instances.clone());
         } else {
