@@ -50,7 +50,14 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-- camera could use a look_at function
+2:
+- move color and depth textures into camera
+
+3:
+- render to texture, and use display triangle
+
+THEN we can use "camera" with depth textures to render shadows
+
 
 - THEN
 	- shadows!?

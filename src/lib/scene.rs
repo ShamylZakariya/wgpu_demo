@@ -24,16 +24,8 @@ impl Scene {
         lights: HashMap<usize, light::Light>,
         models: HashMap<usize, model::Model>,
     ) -> Self {
-        let projection = camera::Projection::new(
-            gpu_state.size().width,
-            gpu_state.size().height,
-            Deg(45.0),
-            0.5,
-            500.0,
-        );
-
-        let camera_controller =
-            camera::CameraController::new(&gpu_state.device, camera, projection, 4.0, 0.4);
+        let mut camera_controller = camera::CameraController::new(camera, 4.0, 0.4);
+        camera_controller.resize(gpu_state.size());
 
         // create a pipeline (if needed) for each material
         for model in models.values() {

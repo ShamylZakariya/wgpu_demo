@@ -18,31 +18,143 @@ const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
 
 ///////////////////////////////////////////////
 
-#[derive(Debug)]
-pub struct Camera {
-    position: Point3<f32>,
-    yaw: Rad<f32>,
-    pitch: Rad<f32>,
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+struct CameraUniform {
+    view_position: [f32; 4],
+    view_proj: [[f32; 4]; 4],
 }
 
-impl Camera {
-    pub fn new<P, A>(position: P, yaw: A, pitch: A) -> Self
-    where
-        P: Into<Point3<f32>>,
-        A: Into<Rad<f32>>,
-    {
+impl CameraUniform {
+    fn new() -> Self {
         Self {
-            position: position.into(),
-            yaw: yaw.into(),
-            pitch: pitch.into(),
+            view_position: cgmath::Vector4::zero().into(),
+            view_proj: cgmath::Matrix4::identity().into(),
         }
     }
 
+    fn update_view_proj(
+        &mut self,
+        camera_position: Point3<f32>,
+        camera_projection: Matrix4<f32>,
+        camera_view: Matrix4<f32>,
+    ) {
+        self.view_position = camera_position.to_homogeneous().into();
+        self.view_proj = (camera_projection * camera_view).into();
+    }
+}
+
+///////////////////////////////////////////////
+
+#[derive(Debug)]
+pub struct Camera {
+    // world view
+    position: Point3<f32>,
+    look: Matrix3<f32>,
+
+    // projection
+    aspect: f32,
+    fovy: Rad<f32>,
+    znear: f32,
+    zfar: f32,
+
+    // uniform storage
+    is_dirty: bool,
+    buffer: wgpu::Buffer,
+    uniform_data: CameraUniform,
+    bind_group: wgpu::BindGroup,
+}
+
+impl Camera {
+    pub fn new<R: Into<Rad<f32>>>(
+        device: &wgpu::Device,
+        width: u32,
+        height: u32,
+        fovy: R,
+        znear: f32,
+        zfar: f32,
+    ) -> Self {
+        let uniform_data = CameraUniform::new();
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera::buffer"),
+            contents: bytemuck::cast_slice(&[uniform_data]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &Self::bind_group_layout(device),
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+            label: Some("Camera::bind_group"),
+        });
+
+        Self {
+            position: Point3::new(0.0, 0.0, 0.0),
+            look: Matrix3::identity(),
+            aspect: width as f32 / height as f32,
+            fovy: fovy.into(),
+            znear,
+            zfar,
+            is_dirty: true,
+            buffer,
+            uniform_data,
+            bind_group,
+        }
+    }
+
+    pub fn update(&mut self, queue: &wgpu::Queue) {
+        if self.is_dirty {
+            self.uniform_data.update_view_proj(
+                self.position,
+                self.projection_matrix(),
+                self.view_matrix(),
+            );
+            queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform_data]));
+            self.is_dirty = false;
+        }
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.aspect = width as f32 / height as f32;
+        self.is_dirty = true;
+    }
+
+    pub fn look_at<P, V>(&mut self, position: P, at: P, up: V)
+    where
+        P: Into<Point3<f32>>,
+        V: Into<Vector3<f32>>,
+    {
+        let position: Point3<f32> = position.into();
+        let at: Point3<f32> = at.into();
+        let up: Vector3<f32> = up.into().normalize();
+
+        let forward = -(at - position).normalize();
+        let right = up.cross(forward).normalize();
+        let up = forward.cross(right).normalize();
+
+        self.look = Matrix3::from_cols(right, up, forward);
+        self.position = position;
+        self.is_dirty = true;
+    }
+
+    pub fn local_translate<V: Into<Vector3<f32>>>(&mut self, translation: V) {
+        let translation: Vector3<f32> = translation.into();
+        let world_translation = self.look * translation;
+        self.position += world_translation;
+        self.is_dirty = true;
+    }
+
+    pub fn rotate_by(&mut self, yaw: Rad<f32>, pitch: Rad<f32>) {
+        // perform rotation about local right axis before rotating about global (0,1,0)
+        self.look = Matrix3::from_axis_angle(self.look[0], pitch) * self.look;
+        self.look = Matrix3::from_angle_y(yaw) * self.look;
+        self.is_dirty = true;
+    }
+
     pub fn world_rotation(&self) -> Matrix3<f32> {
-        let yaw_rotation = Matrix3::from_axis_angle(Vector3::unit_y(), self.yaw);
-        let right = yaw_rotation[0].normalize();
-        let pitch_rotation = Matrix3::from_axis_angle(right, self.pitch);
-        pitch_rotation.mul(yaw_rotation)
+        self.look
     }
 
     pub fn world_transform(&self) -> Matrix4<f32> {
@@ -60,129 +172,9 @@ impl Camera {
     pub fn view_matrix(&self) -> Matrix4<f32> {
         self.world_transform().invert().unwrap()
     }
-}
 
-///////////////////////////////////////////////
-
-#[derive(Debug)]
-pub struct Projection {
-    aspect: f32,
-    fovy: Rad<f32>,
-    znear: f32,
-    zfar: f32,
-}
-
-impl Projection {
-    pub fn new<F: Into<Rad<f32>>>(width: u32, height: u32, fovy: F, znear: f32, zfar: f32) -> Self {
-        Self {
-            aspect: width as f32 / height as f32,
-            fovy: fovy.into(),
-            znear,
-            zfar,
-        }
-    }
-
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.aspect = width as f32 / height as f32;
-    }
-
-    pub fn calc_matrix(&self) -> Matrix4<f32> {
+    pub fn projection_matrix(&self) -> Matrix4<f32> {
         OPENGL_TO_WGPU_MATRIX * perspective(self.fovy, self.aspect, self.znear, self.zfar)
-    }
-}
-
-///////////////////////////////////////////////
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct CameraUniform {
-    view_position: [f32; 4],
-    view_proj: [[f32; 4]; 4],
-}
-
-impl CameraUniform {
-    fn new() -> Self {
-        Self {
-            view_position: cgmath::Vector4::zero().into(),
-            view_proj: cgmath::Matrix4::identity().into(),
-        }
-    }
-
-    fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
-        self.view_position = camera.position.to_homogeneous().into();
-        self.view_proj = (projection.calc_matrix() * camera.view_matrix()).into();
-    }
-}
-
-///////////////////////////////////////////////
-
-#[derive(Debug)]
-pub struct CameraController {
-    keyboard_horizontal: f32,
-    keyboard_forward: f32,
-    keyboard_vertical: f32,
-    keyboard_yaw: f32,
-    keyboard_pitch: f32,
-    keyboard_shift_down: bool,
-    mouse_yaw: f32,
-    mouse_pitch: f32,
-    zoom: f32,
-    speed: f32,
-    sensitivity: f32,
-
-    camera: Camera,
-    projection: Projection,
-    projection_is_dirty: bool,
-    buffer: wgpu::Buffer,
-    uniform_data: CameraUniform,
-    bind_group: wgpu::BindGroup,
-}
-
-impl CameraController {
-    pub fn new(
-        device: &wgpu::Device,
-        camera: Camera,
-        projection: Projection,
-        speed: f32,
-        sensitivity: f32,
-    ) -> Self {
-        let mut uniform_data = CameraUniform::new();
-        uniform_data.update_view_proj(&camera, &projection);
-
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("CameraController::buffer"),
-            contents: bytemuck::cast_slice(&[uniform_data]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &Self::bind_group_layout(device),
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-            label: Some("CameraController::bind_group"),
-        });
-
-        Self {
-            keyboard_horizontal: 0.0,
-            keyboard_forward: 0.0,
-            keyboard_vertical: 0.0,
-            keyboard_yaw: 0.0,
-            keyboard_pitch: 0.0,
-            keyboard_shift_down: false,
-            mouse_yaw: 0.0,
-            mouse_pitch: 0.0,
-            zoom: 0.0,
-            speed,
-            sensitivity,
-            camera,
-            projection,
-            projection_is_dirty: true,
-            buffer,
-            uniform_data,
-            bind_group,
-        }
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
@@ -203,6 +195,47 @@ impl CameraController {
             }],
             label: Some("CameraController::bind_group_layout"),
         })
+    }
+}
+
+///////////////////////////////////////////////
+
+#[derive(Debug)]
+pub struct CameraController {
+    keyboard_horizontal: f32,
+    keyboard_forward: f32,
+    keyboard_vertical: f32,
+    keyboard_yaw: f32,
+    keyboard_pitch: f32,
+    keyboard_shift_down: bool,
+    mouse_yaw: f32,
+    mouse_pitch: f32,
+    zoom: f32,
+    speed: f32,
+    sensitivity: f32,
+    camera: Camera,
+}
+
+impl CameraController {
+    pub fn new(camera: Camera, speed: f32, sensitivity: f32) -> Self {
+        Self {
+            keyboard_horizontal: 0.0,
+            keyboard_forward: 0.0,
+            keyboard_vertical: 0.0,
+            keyboard_yaw: 0.0,
+            keyboard_pitch: 0.0,
+            keyboard_shift_down: false,
+            mouse_yaw: 0.0,
+            mouse_pitch: 0.0,
+            zoom: 0.0,
+            speed,
+            sensitivity,
+            camera,
+        }
+    }
+
+    pub fn camera(&self) -> &Camera {
+        &self.camera
     }
 
     pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
@@ -273,45 +306,38 @@ impl CameraController {
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        self.projection.resize(new_size.width, new_size.height);
-        self.projection_is_dirty = true;
+        self.camera.resize(new_size.width, new_size.height);
     }
 
     pub fn update(&mut self, queue: &wgpu::Queue, dt: Duration) {
         let dt = dt.as_secs_f32();
-        let mut camera_is_dirty = false;
 
         // Update camera position
         let linear_vel = self.speed * dt * if self.keyboard_shift_down { 3.0 } else { 1.0 };
-        let mut camera_position = self.camera.position;
-        let camera_rotation = self.camera.world_rotation();
-        let camera_right = camera_rotation[0].normalize();
-        let camera_up = camera_rotation[1].normalize();
-        let camera_forward = camera_rotation[2].normalize() * -1.;
-
-        camera_position += camera_forward * self.keyboard_forward * linear_vel;
-        camera_position += camera_right * self.keyboard_horizontal * linear_vel;
-        camera_position += camera_up * self.keyboard_vertical * linear_vel;
-        if camera_position.distance2(self.camera.position) > 1e-4 {
-            self.camera.position = camera_position;
-            camera_is_dirty = true;
+        let local_camera_translation = Vector3::new(
+            self.keyboard_horizontal * linear_vel,
+            self.keyboard_vertical * linear_vel,
+            self.keyboard_forward * -linear_vel,
+        );
+        if local_camera_translation.magnitude2() > 1e-4 {
+            self.camera.local_translate(local_camera_translation);
         }
 
         // Update camera rotation
-        let mouse_angular_vel = self.sensitivity * dt;
-        self.camera.yaw += Rad(-self.mouse_yaw) * mouse_angular_vel;
-        self.camera.pitch += Rad(-self.mouse_pitch) * mouse_angular_vel;
+        if self.mouse_yaw.abs() > 0.0 || self.mouse_pitch.abs() > 0.0 {
+            let mouse_angular_vel = self.sensitivity * dt;
+            self.camera.rotate_by(
+                Rad(-self.mouse_yaw) * mouse_angular_vel,
+                Rad(-self.mouse_pitch) * mouse_angular_vel,
+            );
+        }
 
-        let keyboard_angular_vel = self.speed * self.sensitivity * dt;
-        self.camera.yaw += Rad(self.keyboard_yaw) * keyboard_angular_vel;
-        self.camera.pitch += Rad(self.keyboard_pitch) * keyboard_angular_vel;
-
-        if self.mouse_yaw.abs() > 0.0
-            || self.mouse_pitch.abs() > 0.0
-            || self.keyboard_yaw.abs() > 0.0
-            || self.keyboard_pitch.abs() > 0.0
-        {
-            camera_is_dirty = true
+        if self.keyboard_yaw.abs() > 0.0 || self.keyboard_pitch.abs() > 0.0 {
+            let keyboard_angular_vel = self.speed * self.sensitivity * dt;
+            self.camera.rotate_by(
+                Rad(self.keyboard_yaw) * keyboard_angular_vel,
+                Rad(self.keyboard_pitch) * keyboard_angular_vel,
+            );
         }
 
         // Zero out mouse motion
@@ -320,16 +346,11 @@ impl CameraController {
 
         // Update Field of View
         let zoom = self.zoom.min(100f32).max(-100f32) / 100f32;
-        let fov = Deg(45.) + Deg(zoom * 30f32);
-        self.projection.fovy = fov.into();
-
-        // Update the uniform buffer and write it
-        if camera_is_dirty || self.projection_is_dirty {
-            self.uniform_data
-                .update_view_proj(&self.camera, &self.projection);
-
-            queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform_data]));
-            self.projection_is_dirty = false;
+        let fov: Rad<f32> = (Deg(45.) + Deg(zoom * 30f32)).into();
+        if fov != self.camera.fovy {
+            self.camera.fovy = fov.into();
         }
+
+        self.camera.update(queue);
     }
 }
