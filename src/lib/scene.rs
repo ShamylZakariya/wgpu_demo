@@ -9,12 +9,12 @@ use super::{app, camera, gpu_state, light, model, render_pipeline};
 
 pub struct Scene {
     size: winit::dpi::PhysicalSize<u32>,
+    time: instant::Duration,
+    mouse_pressed: bool,
     camera_controller: camera::CameraController,
     ambient_light: light::Light,
     pub lights: HashMap<usize, light::Light>,
     pub models: HashMap<usize, model::Model>,
-    mouse_pressed: bool,
-    time: instant::Duration,
 }
 
 impl Scene {
@@ -46,12 +46,12 @@ impl Scene {
 
         Self {
             size: gpu_state.size(),
+            time: instant::Duration::default(),
+            mouse_pressed: false,
             camera_controller,
             ambient_light,
             lights,
             models,
-            mouse_pressed: false,
-            time: instant::Duration::default(),
         }
     }
 
@@ -139,19 +139,15 @@ impl app::AppState for Scene {
         self.time += dt;
     }
 
-    fn render(&mut self, gpu_state: &mut gpu_state::GpuState) -> Result<(), wgpu::SurfaceError> {
-        let output = gpu_state.surface.get_current_texture()?;
+    fn render(
+        &mut self,
+        gpu_state: &mut gpu_state::GpuState,
+        encoder: &mut wgpu::CommandEncoder,
+        output: &wgpu::SurfaceTexture,
+    ) {
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder =
-            gpu_state
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Render Encoder"),
-                });
-
-        // Render solid passes
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Ambient Render Pass"),
@@ -211,10 +207,5 @@ impl app::AppState for Scene {
                 }
             }
         }
-
-        gpu_state.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
-
-        Ok(())
     }
 }

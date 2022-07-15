@@ -7,8 +7,8 @@ use winit::{
 
 use crate::lib::gpu_state;
 
-use super::gpu_state::GpuState;
 use super::scene::Scene;
+use super::{compositor, gpu_state::GpuState};
 
 pub trait AppState {
     fn resize(
@@ -23,7 +23,12 @@ pub trait AppState {
         mouse_motion: Option<(f64, f64)>,
     ) -> bool;
     fn update(&mut self, gpu_state: &mut gpu_state::GpuState, dt: instant::Duration);
-    fn render(&mut self, gpu_state: &mut gpu_state::GpuState) -> Result<(), wgpu::SurfaceError>;
+    fn render(
+        &mut self,
+        gpu_state: &mut gpu_state::GpuState,
+        encoder: &mut wgpu::CommandEncoder,
+        output: &wgpu::SurfaceTexture,
+    );
 }
 
 pub async fn run<F, U>(factory: F, update: U)
@@ -40,6 +45,7 @@ where
 
     let mut gpu_state = gpu_state::GpuState::new(&window).await;
     let mut scene = factory(&window, &mut gpu_state);
+    let mut compositor = compositor::Compositor::new(&mut gpu_state);
 
     // start even loop
     let mut last_render_time = instant::Instant::now();
@@ -49,7 +55,9 @@ where
                 event: DeviceEvent::MouseMotion{ delta, },
                 .. // We're not using device_id currently
             } => {
-                scene.input(None, Some(delta));
+                if !scene.input(None, Some(delta)) {
+                    compositor.input(None, Some(delta));
+                }
             }
         Event::RedrawRequested(window_id) if window_id == window.id() => {
             let now = instant::Instant::now();
@@ -57,13 +65,30 @@ where
             last_render_time = now;
             update(&mut scene);
             scene.update( &mut gpu_state, dt);
-            match scene.render(&mut gpu_state) {
-                Ok(_) => {}
-                // Reconfigure the surface if lost
+            compositor.update(&mut gpu_state, dt);
+
+            match gpu_state.surface.get_current_texture() {
+                Ok(output) => {
+
+                    let mut encoder =
+                            gpu_state
+                                .device
+                                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                    label: Some("Render Encoder"),
+                                });
+
+                    scene.render(&mut gpu_state, &mut encoder, &output);
+                    compositor.render(&mut gpu_state, &mut encoder, &output);
+
+                    gpu_state.queue.submit(std::iter::once(encoder.finish()));
+                    output.present();
+
+                },
                 Err(wgpu::SurfaceError::Lost) => {
                     let size = gpu_state.size();
                     gpu_state.resize(size);
                     scene.resize(&mut gpu_state, size);
+                    compositor.resize(&mut gpu_state, size);
                 }
                 // The system is out of memory, we should probably quit
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
@@ -94,10 +119,12 @@ where
                     WindowEvent::Resized(physical_size) => {
                         gpu_state.resize(*physical_size);
                         scene.resize(&mut gpu_state, *physical_size);
+                        compositor.resize(&mut gpu_state, *physical_size);
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                         gpu_state.resize(**new_inner_size);
                         scene.resize(&mut gpu_state, **new_inner_size);
+                        compositor.resize(&mut gpu_state, **new_inner_size);
                     }
                     _ => {}
                 }
