@@ -54,7 +54,7 @@ pub struct Camera {
 
     // projection
     aspect: f32,
-    fovy: Rad<f32>,
+    fov_y: Rad<f32>,
     znear: f32,
     zfar: f32,
 
@@ -94,7 +94,7 @@ impl Camera {
             position: Point3::new(0.0, 0.0, 0.0),
             look: Matrix3::identity(),
             aspect: width as f32 / height as f32,
-            fovy: fovy.into(),
+            fov_y: fovy.into(),
             znear,
             zfar,
             is_dirty: true,
@@ -119,6 +119,18 @@ impl Camera {
     pub fn resize(&mut self, width: u32, height: u32) {
         self.aspect = width as f32 / height as f32;
         self.is_dirty = true;
+    }
+
+    pub fn fov_y(&self) -> Rad<f32> {
+        self.fov_y
+    }
+
+    pub fn set_fov_y<R: Into<Rad<f32>>>(&mut self, new_fov_y: R) {
+        let new_fov_y: Rad<f32> = new_fov_y.into();
+        if new_fov_y != self.fov_y {
+            self.fov_y = new_fov_y;
+            self.is_dirty = true;
+        }
     }
 
     pub fn look_at<P, V>(&mut self, position: P, at: P, up: V)
@@ -174,7 +186,7 @@ impl Camera {
     }
 
     pub fn projection_matrix(&self) -> Matrix4<f32> {
-        OPENGL_TO_WGPU_MATRIX * perspective(self.fovy, self.aspect, self.znear, self.zfar)
+        OPENGL_TO_WGPU_MATRIX * perspective(self.fov_y, self.aspect, self.znear, self.zfar)
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
@@ -303,6 +315,7 @@ impl CameraController {
             MouseScrollDelta::LineDelta(_, scroll) => *scroll * 20_f32,
             MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => *scroll as f32,
         };
+        self.zoom = self.zoom.min(100f32).max(-100f32);
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -345,11 +358,8 @@ impl CameraController {
         self.mouse_pitch = 0.0;
 
         // Update Field of View
-        let zoom = self.zoom.min(100f32).max(-100f32) / 100f32;
-        let fov: Rad<f32> = (Deg(45.) + Deg(zoom * 30f32)).into();
-        if fov != self.camera.fovy {
-            self.camera.fovy = fov.into();
-        }
+        let fov: Rad<f32> = (Deg(45.) + Deg((self.zoom / 100_f32) * 30f32)).into();
+        self.camera.set_fov_y(fov);
 
         self.camera.update(queue);
     }
