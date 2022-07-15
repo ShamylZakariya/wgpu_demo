@@ -50,6 +50,14 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
+Render to Texture
+
+1:
+- add a color texture field to gpu_state
+- make Scene render to that, not the current (swapchain-based?) texture view
+- make a PostProcessing struct that lives alongside Scene and is similarly structured (resize, draw, etc)
+
+
 2:
 - move color and depth textures into camera
 
@@ -65,3 +73,4 @@ THEN we can use "camera" with depth textures to render shadows
 
 Do I want a GUI?
 	- https://github.com/emilk/egui#example
+Things and stuff and people and places....

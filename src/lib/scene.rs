@@ -8,7 +8,7 @@ use super::{app, camera, gpu_state, light, model, render_pipeline};
 //////////////////////////////////////////////
 
 pub struct Scene {
-    gpu_state: gpu_state::GpuState,
+    size: winit::dpi::PhysicalSize<u32>,
     camera_controller: camera::CameraController,
     ambient_light: light::Light,
     pub lights: HashMap<usize, light::Light>,
@@ -19,7 +19,7 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(
-        mut gpu_state: gpu_state::GpuState,
+        gpu_state: &mut gpu_state::GpuState,
         camera: camera::Camera,
         lights: HashMap<usize, light::Light>,
         models: HashMap<usize, model::Model>,
@@ -29,7 +29,7 @@ impl Scene {
 
         // create a pipeline (if needed) for each material
         for model in models.values() {
-            model.prepare_pipelines(&mut gpu_state);
+            model.prepare_pipelines(gpu_state);
         }
 
         // Create an ambient light which is the sum of all the ambient terms of the light sources provided
@@ -45,7 +45,7 @@ impl Scene {
         );
 
         Self {
-            gpu_state,
+            size: gpu_state.size(),
             camera_controller,
             ambient_light,
             lights,
@@ -61,13 +61,17 @@ impl Scene {
 }
 
 impl app::AppState for Scene {
-    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        self.gpu_state.resize(new_size);
+    fn resize(
+        &mut self,
+        _gpu_state: &mut gpu_state::GpuState,
+        new_size: winit::dpi::PhysicalSize<u32>,
+    ) {
+        self.size = new_size;
         self.camera_controller.resize(new_size);
     }
 
     fn size(&self) -> winit::dpi::PhysicalSize<u32> {
-        self.gpu_state.size()
+        self.size
     }
 
     fn input(
@@ -115,33 +119,33 @@ impl app::AppState for Scene {
         false
     }
 
-    fn update(&mut self, dt: instant::Duration) {
-        self.camera_controller.update(&self.gpu_state.queue, dt);
+    fn update(&mut self, gpu_state: &mut gpu_state::GpuState, dt: instant::Duration) {
+        self.camera_controller.update(&gpu_state.queue, dt);
 
         self.ambient_light.set_ambient(
             self.lights
                 .values()
                 .fold(Vector3::zero(), |total, light| total + light.ambient()),
         );
-        self.ambient_light.update(&self.gpu_state.queue);
+        self.ambient_light.update(&gpu_state.queue);
 
         for light in self.lights.values_mut() {
-            light.update(&self.gpu_state.queue);
+            light.update(&gpu_state.queue);
         }
         for model in self.models.values_mut() {
-            model.update(&self.gpu_state.queue);
+            model.update(&gpu_state.queue);
         }
 
         self.time += dt;
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.gpu_state.surface.get_current_texture()?;
+    fn render(&mut self, gpu_state: &mut gpu_state::GpuState) -> Result<(), wgpu::SurfaceError> {
+        let output = gpu_state.surface.get_current_texture()?;
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder =
-            self.gpu_state
+            gpu_state
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Render Encoder"),
@@ -168,7 +172,7 @@ impl app::AppState for Scene {
                     }),
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.gpu_state.depth_texture.view,
+                    view: &gpu_state.depth_attachment.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: true,
@@ -181,7 +185,7 @@ impl app::AppState for Scene {
             for model in self.models.values() {
                 model::draw_model(
                     &mut render_pass,
-                    &self.gpu_state.pipeline_vendor,
+                    &gpu_state.pipeline_vendor,
                     model,
                     &self.camera_controller,
                     &self.ambient_light,
@@ -198,7 +202,7 @@ impl app::AppState for Scene {
                 for model in self.models.values() {
                     model::draw_model(
                         &mut render_pass,
-                        &self.gpu_state.pipeline_vendor,
+                        &gpu_state.pipeline_vendor,
                         model,
                         &self.camera_controller,
                         light,
@@ -208,9 +212,7 @@ impl app::AppState for Scene {
             }
         }
 
-        self.gpu_state
-            .queue
-            .submit(std::iter::once(encoder.finish()));
+        gpu_state.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
         Ok(())

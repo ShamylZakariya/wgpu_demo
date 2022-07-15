@@ -11,20 +11,24 @@ use super::gpu_state::GpuState;
 use super::scene::Scene;
 
 pub trait AppState {
-    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>);
+    fn resize(
+        &mut self,
+        gpu_state: &mut gpu_state::GpuState,
+        new_size: winit::dpi::PhysicalSize<u32>,
+    );
     fn size(&self) -> PhysicalSize<u32>;
     fn input(
         &mut self,
         event: Option<&winit::event::WindowEvent>,
         mouse_motion: Option<(f64, f64)>,
     ) -> bool;
-    fn update(&mut self, dt: instant::Duration);
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError>;
+    fn update(&mut self, gpu_state: &mut gpu_state::GpuState, dt: instant::Duration);
+    fn render(&mut self, gpu_state: &mut gpu_state::GpuState) -> Result<(), wgpu::SurfaceError>;
 }
 
 pub async fn run<F, U>(factory: F, update: U)
 where
-    F: Fn(&winit::window::Window, GpuState) -> Scene,
+    F: Fn(&winit::window::Window, &mut GpuState) -> Scene,
     U: 'static + Fn(&mut Scene),
 {
     let event_loop = EventLoop::new();
@@ -34,8 +38,8 @@ where
         .build(&event_loop)
         .unwrap();
 
-    let gpu_state = gpu_state::GpuState::new(&window).await;
-    let mut scene = factory(&window, gpu_state);
+    let mut gpu_state = gpu_state::GpuState::new(&window).await;
+    let mut scene = factory(&window, &mut gpu_state);
 
     // start even loop
     let mut last_render_time = instant::Instant::now();
@@ -52,11 +56,15 @@ where
             let dt = now - last_render_time;
             last_render_time = now;
             update(&mut scene);
-            scene.update(dt);
-            match scene.render() {
+            scene.update( &mut gpu_state, dt);
+            match scene.render(&mut gpu_state) {
                 Ok(_) => {}
                 // Reconfigure the surface if lost
-                Err(wgpu::SurfaceError::Lost) => scene.resize(scene.size()),
+                Err(wgpu::SurfaceError::Lost) => {
+                    let size = gpu_state.size();
+                    gpu_state.resize(size);
+                    scene.resize(&mut gpu_state, size);
+                }
                 // The system is out of memory, we should probably quit
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                 // All other errors (Outdated, Timeout) should be resolved by the next frame
@@ -84,10 +92,12 @@ where
                         ..
                     } => *control_flow = ControlFlow::Exit,
                     WindowEvent::Resized(physical_size) => {
-                        scene.resize(*physical_size);
+                        gpu_state.resize(*physical_size);
+                        scene.resize(&mut gpu_state, *physical_size);
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        scene.resize(**new_inner_size);
+                        gpu_state.resize(**new_inner_size);
+                        scene.resize(&mut gpu_state, **new_inner_size);
                     }
                     _ => {}
                 }
