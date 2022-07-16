@@ -1,7 +1,21 @@
+
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) tex_coord: vec2<f32>,
 };
+
+struct CompositorUniform {
+    @location(0) tint: vec4<f32>,
+}
+
+@group(0) @binding(0)
+var t_color_attachment: texture_2d<f32>;
+
+@group(0) @binding(1)
+var s_color_attachment: sampler;
+
+@group(1) @binding(0)
+var<uniform> compositor: CompositorUniform;
 
 
 @vertex
@@ -20,6 +34,9 @@ fn compositor_vs_main(
 
 @fragment
 fn compositor_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // for now just dump the tex coord
-    return vec4<f32>(in.tex_coord.x, in.tex_coord.y, 0.0, 1.0);
+    // return vec4<f32>(in.tex_coord, 0.0, 1.0) * compositor.tint;
+
+    return textureSample(t_color_attachment, s_color_attachment, in.tex_coord);
+    // let tinted = color;
+    // return vec4<f32>(tinted.rgb, 1.0);
 }

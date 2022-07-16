@@ -26,6 +26,22 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
     Ok(data)
 }
 
+pub fn load_texture_sync(
+    file_name: &str,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    is_normal_map: bool,
+    generate_mipmaps: bool,
+) -> anyhow::Result<texture::Texture> {
+    pollster::block_on(load_texture(
+        file_name,
+        device,
+        queue,
+        is_normal_map,
+        generate_mipmaps,
+    ))
+}
+
 pub async fn load_texture(
     file_name: &str,
     device: &wgpu::Device,
