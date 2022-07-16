@@ -5,7 +5,8 @@ struct VertexOutput {
 };
 
 struct CompositorUniform {
-    @location(0) tint: vec4<f32>,
+    // x: z_near, y: z_far (z, w unused)
+    @location(0) camera_z_near_far: vec4<f32>,
 }
 
 @group(0) @binding(0)
@@ -30,6 +31,10 @@ fn hsv_to_rgb(hsv: vec3<f32>) -> vec3<f32> {
     return hsv.z * mix(K.xxx, clamp(p - K.xxx, vec3<f32>(0.0), vec3<f32>(1.0)), hsv.y);
 }
 
+fn linearize_depth(depth: f32, z_near: f32, z_far: f32) -> f32 {
+    return (pow(z_far + 1.0, depth) - 1.0) / z_far;
+}
+
 @vertex
 fn compositor_vs_main(
     @builtin(vertex_index) in_vertex_index: u32,
@@ -47,13 +52,10 @@ fn compositor_vs_main(
 @fragment
 fn compositor_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Output color
-    return compositor.tint * textureSample(t_color_attachment, s_color_attachment, in.tex_coord);
+    // return textureSample(t_color_attachment, s_color_attachment, in.tex_coord);
 
-    // Output depth - this works, but without linearizing the depth it's not useful
-    // TODO: Bring in znear, zfar and linearize the depth
-    // https://stackoverflow.com/questions/51108596/linearize-depth
-
-    // let depth = textureSample(t_depth_attachment, s_depth_attachment, in.tex_coord).r;
-    // let color = hsv_to_rgb(vec3<f32>(fract(depth * 10.0), 1.0, 1.0));
-    // return vec4<f32>(color, 1.0);
+    let depth = textureSample(t_depth_attachment, s_depth_attachment, in.tex_coord).r;
+    let linearized = linearize_depth(depth, compositor.camera_z_near_far.x, compositor.camera_z_near_far.y);
+    let color = hsv_to_rgb(vec3<f32>(linearized, 1.0, 1.0));
+    return vec4<f32>(color, 1.0);
 }

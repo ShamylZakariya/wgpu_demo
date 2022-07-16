@@ -1,20 +1,23 @@
 use cgmath::{Vector3, Vector4};
 use wgpu::util::DeviceExt;
 
-pub fn color3<V>(color: V) -> Vector3<f32>
+pub type Vec3 = Vector3<f32>;
+pub type Vec4 = Vector4<f32>;
+
+pub fn color3<V>(color: V) -> Vec3
 where
-    V: Into<cgmath::Vector3<f32>>,
+    V: Into<Vec3>,
 {
-    let v: Vector3<f32> = color.into();
+    let v: Vec3 = color.into();
     Vector3::new(v.x * v.x, v.y * v.y, v.z * v.z)
 }
 
-pub fn color4<V>(color: V) -> Vector4<f32>
+pub fn color4<V>(color: V) -> Vec4
 where
-    V: Into<cgmath::Vector4<f32>>,
+    V: Into<Vec4>,
 {
-    let v: Vector4<f32> = color.into();
-    Vector4::new(v.x * v.x, v.y * v.y, v.z * v.z, v.w)
+    let v: Vec4 = color.into();
+    Vec4::new(v.x * v.x, v.y * v.y, v.z * v.z, v.w)
 }
 
 /// Uniforms is a generic "holder" for uniform data types.

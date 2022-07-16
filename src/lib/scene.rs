@@ -11,7 +11,7 @@ pub struct Scene {
     size: winit::dpi::PhysicalSize<u32>,
     time: instant::Duration,
     mouse_pressed: bool,
-    camera_controller: camera::CameraController,
+    pub camera_controller: camera::CameraController,
     ambient_light: light::Light,
     pub lights: HashMap<usize, light::Light>,
     pub models: HashMap<usize, model::Model>,

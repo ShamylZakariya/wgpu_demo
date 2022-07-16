@@ -55,8 +55,8 @@ pub struct Camera {
     // projection
     aspect: f32,
     fov_y: Rad<f32>,
-    znear: f32,
-    zfar: f32,
+    z_near: f32,
+    z_far: f32,
 
     // uniform storage
     is_dirty: bool,
@@ -70,9 +70,9 @@ impl Camera {
         device: &wgpu::Device,
         width: u32,
         height: u32,
-        fovy: R,
-        znear: f32,
-        zfar: f32,
+        fov_y: R,
+        z_near: f32,
+        z_far: f32,
     ) -> Self {
         let uniform_data = CameraUniform::new();
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -94,9 +94,9 @@ impl Camera {
             position: Point3::new(0.0, 0.0, 0.0),
             look: Matrix3::identity(),
             aspect: width as f32 / height as f32,
-            fov_y: fovy.into(),
-            znear,
-            zfar,
+            fov_y: fov_y.into(),
+            z_near,
+            z_far,
             is_dirty: true,
             buffer,
             uniform_data,
@@ -129,6 +129,18 @@ impl Camera {
         let new_fov_y: Rad<f32> = new_fov_y.into();
         if new_fov_y != self.fov_y {
             self.fov_y = new_fov_y;
+            self.is_dirty = true;
+        }
+    }
+
+    pub fn depth_range(&self) -> (f32, f32) {
+        (self.z_near, self.z_far)
+    }
+
+    pub fn set_depth_range(&mut self, z_near: f32, z_far: f32) {
+        if (z_near - self.z_near).abs() > 1e-4 || (z_far - self.z_far).abs() > 1e-4 {
+            self.z_near = z_near;
+            self.z_far = z_far;
             self.is_dirty = true;
         }
     }
@@ -186,7 +198,7 @@ impl Camera {
     }
 
     pub fn projection_matrix(&self) -> Matrix4<f32> {
-        OPENGL_TO_WGPU_MATRIX * perspective(self.fov_y, self.aspect, self.znear, self.zfar)
+        OPENGL_TO_WGPU_MATRIX * perspective(self.fov_y, self.aspect, self.z_near, self.z_far)
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {

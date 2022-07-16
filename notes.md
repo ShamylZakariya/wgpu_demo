@@ -52,17 +52,8 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 Render to Texture
 
-1:
-- add a color texture field to gpu_state
-- make Scene render to that, not the current (swapchain-based?) texture view
-- make a PostProcessing struct that lives alongside Scene and is similarly structured (resize, draw, etc)
-
-
-2:
-- move color and depth textures into camera
-
-3:
-- render to texture, and use display triangle
+- made pub Vec3 Vec4 types, should try using them
+- can my Uniform structs use Vec3, Vec4 instead of the array syntax? Might make life easier
 
 THEN we can use "camera" with depth textures to render shadows
 
