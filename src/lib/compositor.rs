@@ -3,8 +3,6 @@ use cgmath::*;
 use super::{
     app::AppState,
     gpu_state,
-    resources::{self, load_texture_sync},
-    texture::Texture,
     util::{self, color4},
 };
 
@@ -30,21 +28,13 @@ pub struct Compositor {
     uniform: CompositorUniform,
     textures_bind_group_layout: wgpu::BindGroupLayout,
     textures_bind_group: wgpu::BindGroup,
+    depth_attachment_sampler: wgpu::Sampler,
     render_pipeline: wgpu::RenderPipeline,
-    debug_color_attachment: Texture,
 }
 
 impl Compositor {
     pub fn new(gpu_state: &mut gpu_state::GpuState) -> Self {
         let uniform = CompositorUniform::new(&gpu_state.device);
-        let debug_color_attachment = load_texture_sync(
-            "cobble-diffuse.png",
-            &gpu_state.device,
-            &gpu_state.queue,
-            false,
-            false,
-        )
-        .expect("Texture should have loaded");
 
         let textures_bind_group_layout =
             gpu_state
@@ -63,9 +53,27 @@ impl Compositor {
                             },
                             count: None,
                         },
-                        // Sampler
+                        // Color Attachment Sampler
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                        // Depth atachment
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        // Depth Attachment Sampler
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 3,
                             visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                             count: None,
@@ -73,10 +81,20 @@ impl Compositor {
                     ],
                 });
 
+        let depth_attachment_sampler = gpu_state.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
         let textures_bind_group = Self::create_textures_bind_group(
             gpu_state,
             &textures_bind_group_layout,
-            &debug_color_attachment,
+            &depth_attachment_sampler,
         );
 
         let render_pipeline_layout =
@@ -93,7 +111,7 @@ impl Compositor {
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Shader"),
                 source: wgpu::ShaderSource::Wgsl(
-                    resources::load_string_sync("shaders/compositor.wgsl")
+                    super::resources::load_string_sync("shaders/compositor.wgsl")
                         .unwrap()
                         .into(),
                 ),
@@ -146,8 +164,8 @@ impl Compositor {
             uniform,
             textures_bind_group_layout,
             textures_bind_group,
+            depth_attachment_sampler,
             render_pipeline,
-            debug_color_attachment,
         }
     }
 
@@ -158,7 +176,7 @@ impl Compositor {
     fn create_textures_bind_group(
         gpu_state: &gpu_state::GpuState,
         texture_layout: &wgpu::BindGroupLayout,
-        texture: &Texture,
+        depth_attachment_sampler: &wgpu::Sampler,
     ) -> wgpu::BindGroup {
         gpu_state
             .device
@@ -167,11 +185,25 @@ impl Compositor {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture.view),
+                        resource: wgpu::BindingResource::TextureView(
+                            &gpu_state.color_attachment.view,
+                        ),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                        resource: wgpu::BindingResource::Sampler(
+                            &gpu_state.color_attachment.sampler,
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(
+                            &gpu_state.depth_attachment.view,
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Sampler(&depth_attachment_sampler),
                     },
                 ],
                 label: Some("Compositor Bind Group"),
@@ -189,7 +221,7 @@ impl AppState for Compositor {
         self.textures_bind_group = Self::create_textures_bind_group(
             gpu_state,
             &self.textures_bind_group_layout,
-            &self.debug_color_attachment,
+            &self.depth_attachment_sampler,
         );
     }
 
@@ -233,7 +265,7 @@ impl AppState for Compositor {
             depth_stencil_attachment: None,
         });
 
-        render_pass.set_pipeline(&&self.render_pipeline);
+        render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.textures_bind_group, &[]);
         render_pass.set_bind_group(1, &self.uniform.bind_group, &[]);
         render_pass.draw(0..3, 0..1);

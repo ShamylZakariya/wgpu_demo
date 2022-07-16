@@ -57,7 +57,7 @@ fn main() {
 
             let models = HashMap::from([(
                 ID_MODEL_CUBE_FLOOR,
-                load_model("cube.obj", Some("plain.mtl"), &positions, &gpu_state),
+                load_model("cube.obj", Some("plain.mtl"), &positions, gpu_state),
             )]);
 
             let ambient_light = light::Light::new_ambient(

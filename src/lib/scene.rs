@@ -143,18 +143,15 @@ impl app::AppState for Scene {
         &mut self,
         gpu_state: &mut gpu_state::GpuState,
         encoder: &mut wgpu::CommandEncoder,
-        output: &wgpu::SurfaceTexture,
+        _output: &wgpu::SurfaceTexture,
     ) {
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Ambient Render Pass"),
                 color_attachments: &[
                     // this is output [[location(0)]]
                     Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
+                        view: &gpu_state.color_attachment.view,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {

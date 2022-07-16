@@ -39,7 +39,7 @@ where
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_decorations(true)
-        .with_title("Hello WGPU")
+        .with_title("WGPU Demo")
         .build(&event_loop)
         .unwrap();
 
