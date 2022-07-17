@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use cgmath::*;
+use cgmath::prelude::*;
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
-use super::{app, camera, gpu_state, light, model, render_pipeline};
+use super::{app, camera, gpu_state, light, model, render_pipeline, util::*};
 
 //////////////////////////////////////////////
 
@@ -35,7 +35,7 @@ impl Scene {
         // Create an ambient light which is the sum of all the ambient terms of the light sources provided
         let ambient_term = lights
             .values()
-            .fold(Vector3::zero(), |total, light| total + light.ambient());
+            .fold(Vec3::zero(), |total, light| total + light.ambient());
 
         let ambient_light = light::Light::new_ambient(
             &gpu_state.device,
@@ -125,7 +125,7 @@ impl app::AppState for Scene {
         self.ambient_light.set_ambient(
             self.lights
                 .values()
-                .fold(Vector3::zero(), |total, light| total + light.ambient()),
+                .fold(Vec3::zero(), |total, light| total + light.ambient()),
         );
         self.ambient_light.update(&gpu_state.queue);
 

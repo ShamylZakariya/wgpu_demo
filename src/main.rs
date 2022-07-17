@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use cgmath::*;
-use lib::{camera, gpu_state::GpuState, light, model, resources, scene};
+use cgmath::prelude::*;
+use lib::{camera, gpu_state::GpuState, light, model, resources, scene, util::*};
 
 #[allow(dead_code)]
 mod lib;
@@ -13,14 +13,14 @@ fn load_model<P>(
     gpu_state: &GpuState,
 ) -> model::Model
 where
-    P: Into<cgmath::Point3<f32>> + Copy,
+    P: Into<Point3> + Copy,
 {
     let instances: Vec<_> = positions
         .iter()
         .map(|p| {
             model::Instance::new(
                 (*p).into(),
-                cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0)),
+                Quat::from_axis_angle(Vec3::unit_z(), deg(0.0)),
             )
         })
         .collect();
@@ -99,7 +99,7 @@ fn main() {
                     constant_attenuation: 1_f32,
                     linear_attenuation: 0_f32,
                     exponential_attenuation: 0_f32,
-                    spot_breadth: Deg(75_f32),
+                    spot_breadth: deg(75_f32),
                 },
             );
 
@@ -114,7 +114,7 @@ fn main() {
                 &gpu_state.device,
                 gpu_state.size.width,
                 gpu_state.size.height,
-                Deg(45.0),
+                deg(45.0),
                 0.5,
                 500.0,
             );

@@ -1,5 +1,3 @@
-use cgmath::*;
-
 use super::{app::AppState, camera::Camera, gpu_state, util::*};
 
 #[repr(C)]

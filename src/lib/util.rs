@@ -1,15 +1,30 @@
-use cgmath::{Vector3, Vector4};
 use wgpu::util::DeviceExt;
 
-pub type Vec3 = Vector3<f32>;
-pub type Vec4 = Vector4<f32>;
+// Some type aliases to make stuff a little less verbose
+pub type Vec2 = cgmath::Vector2<f32>;
+pub type Vec3 = cgmath::Vector3<f32>;
+pub type Vec4 = cgmath::Vector4<f32>;
+pub type Mat3 = cgmath::Matrix3<f32>;
+pub type Mat4 = cgmath::Matrix4<f32>;
+pub type Point3 = cgmath::Point3<f32>;
+pub type Rad = cgmath::Rad<f32>;
+pub type Deg = cgmath::Deg<f32>;
+pub type Quat = cgmath::Quaternion<f32>;
+
+pub fn deg(degrees: f32) -> Deg {
+    cgmath::Deg(degrees)
+}
+
+pub fn rad(degrees: f32) -> Rad {
+    cgmath::Rad(degrees)
+}
 
 pub fn color3<V>(color: V) -> Vec3
 where
     V: Into<Vec3>,
 {
     let v: Vec3 = color.into();
-    Vector3::new(v.x * v.x, v.y * v.y, v.z * v.z)
+    Vec3::new(v.x * v.x, v.y * v.y, v.z * v.z)
 }
 
 pub fn color4<V>(color: V) -> Vec4
