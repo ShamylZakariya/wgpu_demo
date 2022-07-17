@@ -4,8 +4,9 @@ pub struct GpuState {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
-    pub depth_texture: super::texture::Texture,
     pub pipeline_vendor: super::render_pipeline::RenderPipelineVendor,
+    pub depth_attachment: super::texture::Texture,
+    pub color_attachment: super::texture::Texture,
 }
 
 impl GpuState {
@@ -48,8 +49,11 @@ impl GpuState {
         surface.configure(&device, &config);
 
         // create depth texture
-        let depth_texture =
-            super::texture::Texture::create_depth_texture(&device, &config, "Depth Texture");
+        let depth_attachment =
+            super::texture::Texture::create_depth_texture(&device, &config, "Depth Attachment");
+
+        let color_attachment =
+            super::texture::Texture::create_color_texture(&device, &config, "Color Attachment");
 
         Self {
             surface,
@@ -57,8 +61,9 @@ impl GpuState {
             queue,
             config,
             size,
-            depth_texture,
             pipeline_vendor: super::render_pipeline::RenderPipelineVendor::default(),
+            depth_attachment,
+            color_attachment,
         }
     }
 
@@ -68,10 +73,15 @@ impl GpuState {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
-            self.depth_texture = super::texture::Texture::create_depth_texture(
+            self.depth_attachment = super::texture::Texture::create_depth_texture(
                 &self.device,
                 &self.config,
-                "Depth Texture",
+                "Depth Attachment",
+            );
+            self.color_attachment = super::texture::Texture::create_color_texture(
+                &self.device,
+                &self.config,
+                "Color Attachment",
             );
         }
     }

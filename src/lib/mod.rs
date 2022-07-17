@@ -1,5 +1,6 @@
 pub mod app;
 pub mod camera;
+pub mod compositor;
 pub mod gpu_state;
 pub mod light;
 pub mod model;

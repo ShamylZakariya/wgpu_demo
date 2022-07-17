@@ -1,8 +1,8 @@
-use cgmath::prelude::InnerSpace;
+use cgmath::prelude::*;
 use std::io::{BufReader, Cursor};
 use wgpu::util::DeviceExt;
 
-use super::{model, texture};
+use super::{model, texture, util::*};
 
 /////////////////////////////////////////
 
@@ -24,6 +24,22 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
         .join(file_name);
     let data = std::fs::read(path)?;
     Ok(data)
+}
+
+pub fn load_texture_sync(
+    file_name: &str,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    is_normal_map: bool,
+    generate_mipmaps: bool,
+) -> anyhow::Result<texture::Texture> {
+    pollster::block_on(load_texture(
+        file_name,
+        device,
+        queue,
+        is_normal_map,
+        generate_mipmaps,
+    ))
 }
 
 pub async fn load_texture(
@@ -91,9 +107,9 @@ pub async fn load_model(
 
     let mut materials = Vec::new();
     for m in obj_materials? {
-        let ambient = cgmath::Vector4::new(m.ambient[0], m.ambient[1], m.ambient[2], 1.0);
-        let diffuse = cgmath::Vector4::new(m.diffuse[0], m.diffuse[1], m.diffuse[2], 1.0);
-        let specular = cgmath::Vector4::new(m.specular[0], m.specular[1], m.specular[2], 1.0);
+        let ambient = Vec4::new(m.ambient[0], m.ambient[1], m.ambient[2], 1.0);
+        let diffuse = Vec4::new(m.diffuse[0], m.diffuse[1], m.diffuse[2], 1.0);
+        let specular = Vec4::new(m.specular[0], m.specular[1], m.specular[2], 1.0);
 
         let diffuse_texture =
             load_texture(&m.diffuse_texture, device, queue, false, generate_mipmaps)
@@ -152,13 +168,13 @@ pub async fn load_model(
                 let v1 = vertices[c[1] as usize];
                 let v2 = vertices[c[2] as usize];
 
-                let pos0: cgmath::Vector3<_> = v0.position.into();
-                let pos1: cgmath::Vector3<_> = v1.position.into();
-                let pos2: cgmath::Vector3<_> = v2.position.into();
+                let pos0: Vec3 = v0.position.into();
+                let pos1: Vec3 = v1.position.into();
+                let pos2: Vec3 = v2.position.into();
 
-                let uv0: cgmath::Vector2<_> = v0.tex_coords.into();
-                let uv1: cgmath::Vector2<_> = v1.tex_coords.into();
-                let uv2: cgmath::Vector2<_> = v2.tex_coords.into();
+                let uv0: Vec2 = v0.tex_coords.into();
+                let uv1: Vec2 = v1.tex_coords.into();
+                let uv2: Vec2 = v2.tex_coords.into();
 
                 let delta_pos1 = pos1 - pos0;
                 let delta_pos2 = pos2 - pos0;
@@ -170,17 +186,17 @@ pub async fn load_model(
                 let bitangent = (delta_pos2 * delta_uv1.x - delta_pos1 * delta_uv2.x) * -r;
 
                 vertices[c[0] as usize].tangent =
-                    (tangent + cgmath::Vector3::from(vertices[c[0] as usize].tangent)).into();
+                    (tangent + Vec3::from(vertices[c[0] as usize].tangent)).into();
                 vertices[c[1] as usize].tangent =
-                    (tangent + cgmath::Vector3::from(vertices[c[1] as usize].tangent)).into();
+                    (tangent + Vec3::from(vertices[c[1] as usize].tangent)).into();
                 vertices[c[2] as usize].tangent =
-                    (tangent + cgmath::Vector3::from(vertices[c[2] as usize].tangent)).into();
+                    (tangent + Vec3::from(vertices[c[2] as usize].tangent)).into();
                 vertices[c[0] as usize].bitangent =
-                    (bitangent + cgmath::Vector3::from(vertices[c[0] as usize].bitangent)).into();
+                    (bitangent + Vec3::from(vertices[c[0] as usize].bitangent)).into();
                 vertices[c[1] as usize].bitangent =
-                    (bitangent + cgmath::Vector3::from(vertices[c[1] as usize].bitangent)).into();
+                    (bitangent + Vec3::from(vertices[c[1] as usize].bitangent)).into();
                 vertices[c[2] as usize].bitangent =
-                    (bitangent + cgmath::Vector3::from(vertices[c[2] as usize].bitangent)).into();
+                    (bitangent + Vec3::from(vertices[c[2] as usize].bitangent)).into();
 
                 // Used to average the tangents/bitangents
                 triangles_included[c[0] as usize] += 1;
@@ -191,12 +207,8 @@ pub async fn load_model(
             for (i, n) in triangles_included.into_iter().enumerate() {
                 let denom = 1.0 / n as f32;
                 let mut v = &mut vertices[i];
-                v.tangent = (cgmath::Vector3::from(v.tangent) * denom)
-                    .normalize()
-                    .into();
-                v.bitangent = (cgmath::Vector3::from(v.bitangent) * denom)
-                    .normalize()
-                    .into();
+                v.tangent = (Vec3::from(v.tangent) * denom).normalize().into();
+                v.bitangent = (Vec3::from(v.bitangent) * denom).normalize().into();
             }
 
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

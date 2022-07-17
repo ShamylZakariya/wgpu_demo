@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use cgmath::EuclideanSpace;
+use cgmath::prelude::*;
 use wgpu::{util::DeviceExt, vertex_attr_array};
 
 use super::{
@@ -9,7 +9,7 @@ use super::{
     light,
     render_pipeline::{self, RenderPipelineVendor},
     resources, texture,
-    util::color4,
+    util::*,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -41,15 +41,15 @@ impl ModelVertex {
 
 #[derive(Copy, Clone)]
 pub struct Instance {
-    position: cgmath::Point3<f32>,
-    rotation: cgmath::Quaternion<f32>,
+    position: Point3,
+    rotation: Quat,
 }
 
 impl Instance {
     pub fn new<P, R>(position: P, rotation: R) -> Self
     where
-        P: Into<cgmath::Point3<f32>>,
-        R: Into<cgmath::Quaternion<f32>>,
+        P: Into<Point3>,
+        R: Into<Quat>,
     {
         Self {
             position: position.into(),
@@ -58,11 +58,10 @@ impl Instance {
     }
 
     fn as_data(&self) -> InstanceData {
-        let model = cgmath::Matrix4::from_translation(self.position.to_vec())
-            * cgmath::Matrix4::from(self.rotation);
+        let model = Mat4::from_translation(self.position.to_vec()) * Mat4::from(self.rotation);
         InstanceData {
             model: model.into(),
-            normal_matrix: cgmath::Matrix3::from(self.rotation).into(),
+            normal_matrix: Mat3::from(self.rotation).into(),
         }
     }
 
@@ -104,9 +103,9 @@ pub struct MaterialUniform {
 
 pub struct MaterialProperties<'a> {
     pub name: &'a str,
-    pub ambient: cgmath::Vector4<f32>,
-    pub diffuse: cgmath::Vector4<f32>,
-    pub specular: cgmath::Vector4<f32>,
+    pub ambient: Vec4,
+    pub diffuse: Vec4,
+    pub specular: Vec4,
     pub shininess: f32,
     pub diffuse_texture: Option<texture::Texture>,
     pub normal_texture: Option<texture::Texture>,
@@ -117,9 +116,9 @@ impl<'a> Default for MaterialProperties<'a> {
     fn default() -> Self {
         Self {
             name: Default::default(),
-            ambient: cgmath::Vector4::new(1.0, 1.0, 1.0, 1.0),
-            diffuse: cgmath::Vector4::new(1.0, 1.0, 1.0, 1.0),
-            specular: cgmath::Vector4::new(1.0, 1.0, 1.0, 1.0),
+            ambient: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            diffuse: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            specular: Vec4::new(1.0, 1.0, 1.0, 1.0),
             shininess: 1.0,
             diffuse_texture: None,
             normal_texture: None,
@@ -130,9 +129,9 @@ impl<'a> Default for MaterialProperties<'a> {
 
 pub struct Material {
     pub name: String,
-    pub ambient: cgmath::Vector4<f32>,
-    pub diffuse: cgmath::Vector4<f32>,
-    pub specular: cgmath::Vector4<f32>,
+    pub ambient: Vec4,
+    pub diffuse: Vec4,
+    pub specular: Vec4,
     pub shininess: f32,
     pub diffuse_texture: Option<texture::Texture>,
     pub normal_texture: Option<texture::Texture>,

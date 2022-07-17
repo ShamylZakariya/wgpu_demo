@@ -1,4 +1,5 @@
-use cgmath::*;
+use super::util::*;
+use cgmath::prelude::*;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
 use std::ops::Mul;
@@ -7,7 +8,7 @@ use winit::dpi::PhysicalPosition;
 use winit::event::*;
 
 #[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+pub const OPENGL_TO_WGPU_MATRIX: Mat4 = Mat4::new(
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
     0.0, 0.0, 0.5, 0.0,
@@ -28,16 +29,16 @@ struct CameraUniform {
 impl CameraUniform {
     fn new() -> Self {
         Self {
-            view_position: cgmath::Vector4::zero().into(),
-            view_proj: cgmath::Matrix4::identity().into(),
+            view_position: Vec4::zero().into(),
+            view_proj: Mat4::identity().into(),
         }
     }
 
     fn update_view_proj(
         &mut self,
-        camera_position: Point3<f32>,
-        camera_projection: Matrix4<f32>,
-        camera_view: Matrix4<f32>,
+        camera_position: Point3,
+        camera_projection: Mat4,
+        camera_view: Mat4,
     ) {
         self.view_position = camera_position.to_homogeneous().into();
         self.view_proj = (camera_projection * camera_view).into();
@@ -49,14 +50,14 @@ impl CameraUniform {
 #[derive(Debug)]
 pub struct Camera {
     // world view
-    position: Point3<f32>,
-    look: Matrix3<f32>,
+    position: Point3,
+    look: Mat3,
 
     // projection
     aspect: f32,
-    fovy: Rad<f32>,
-    znear: f32,
-    zfar: f32,
+    fov_y: Rad,
+    z_near: f32,
+    z_far: f32,
 
     // uniform storage
     is_dirty: bool,
@@ -66,13 +67,13 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn new<R: Into<Rad<f32>>>(
+    pub fn new<R: Into<Rad>>(
         device: &wgpu::Device,
         width: u32,
         height: u32,
-        fovy: R,
-        znear: f32,
-        zfar: f32,
+        fov_y: R,
+        z_near: f32,
+        z_far: f32,
     ) -> Self {
         let uniform_data = CameraUniform::new();
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -92,11 +93,11 @@ impl Camera {
 
         Self {
             position: Point3::new(0.0, 0.0, 0.0),
-            look: Matrix3::identity(),
+            look: Mat3::identity(),
             aspect: width as f32 / height as f32,
-            fovy: fovy.into(),
-            znear,
-            zfar,
+            fov_y: fov_y.into(),
+            z_near,
+            z_far,
             is_dirty: true,
             buffer,
             uniform_data,
@@ -121,60 +122,85 @@ impl Camera {
         self.is_dirty = true;
     }
 
+    pub fn fov_y(&self) -> Rad {
+        self.fov_y
+    }
+
+    pub fn set_fov_y<R: Into<Rad>>(&mut self, new_fov_y: R) {
+        let new_fov_y: Rad = new_fov_y.into();
+        if new_fov_y != self.fov_y {
+            self.fov_y = new_fov_y;
+            self.is_dirty = true;
+        }
+    }
+
+    pub fn depth_range(&self) -> (f32, f32) {
+        (self.z_near, self.z_far)
+    }
+
+    pub fn set_depth_range(&mut self, z_near: f32, z_far: f32) {
+        if (z_near - self.z_near).abs() > 1e-4 || (z_far - self.z_far).abs() > 1e-4 {
+            self.z_near = z_near;
+            self.z_far = z_far;
+            self.is_dirty = true;
+        }
+    }
+
     pub fn look_at<P, V>(&mut self, position: P, at: P, up: V)
     where
-        P: Into<Point3<f32>>,
-        V: Into<Vector3<f32>>,
+        P: Into<Point3>,
+        V: Into<Vec3>,
     {
-        let position: Point3<f32> = position.into();
-        let at: Point3<f32> = at.into();
-        let up: Vector3<f32> = up.into().normalize();
+        let position: Point3 = position.into();
+        let at: Point3 = at.into();
+        let up: Vec3 = up.into().normalize();
 
         let forward = -(at - position).normalize();
         let right = up.cross(forward).normalize();
         let up = forward.cross(right).normalize();
 
-        self.look = Matrix3::from_cols(right, up, forward);
+        self.look = Mat3::from_cols(right, up, forward);
         self.position = position;
         self.is_dirty = true;
     }
 
-    pub fn local_translate<V: Into<Vector3<f32>>>(&mut self, translation: V) {
-        let translation: Vector3<f32> = translation.into();
+    pub fn local_translate<V: Into<Vec3>>(&mut self, translation: V) {
+        let translation: Vec3 = translation.into();
         let world_translation = self.look * translation;
         self.position += world_translation;
         self.is_dirty = true;
     }
 
-    pub fn rotate_by(&mut self, yaw: Rad<f32>, pitch: Rad<f32>) {
+    pub fn rotate_by(&mut self, yaw: Rad, pitch: Rad) {
         // perform rotation about local right axis before rotating about global (0,1,0)
-        self.look = Matrix3::from_axis_angle(self.look[0], pitch) * self.look;
-        self.look = Matrix3::from_angle_y(yaw) * self.look;
+        self.look = Mat3::from_axis_angle(self.look[0], pitch) * self.look;
+        self.look = Mat3::from_angle_y(yaw) * self.look;
         self.is_dirty = true;
     }
 
-    pub fn world_rotation(&self) -> Matrix3<f32> {
+    pub fn world_rotation(&self) -> Mat3 {
         self.look
     }
 
-    pub fn world_transform(&self) -> Matrix4<f32> {
+    pub fn world_transform(&self) -> Mat4 {
         let world_rotation = self.world_rotation();
-        let world_rotation = Matrix4::from_cols(
+        let world_rotation = Mat4::from_cols(
             world_rotation[0].extend(0.),
             world_rotation[1].extend(0.),
             world_rotation[2].extend(0.),
-            Vector4::unit_w(),
+            Vec4::unit_w(),
         );
-        let world_translation = Matrix4::from_translation(self.position.to_vec());
+        let world_translation = Mat4::from_translation(self.position.to_vec());
         world_translation.mul(world_rotation)
     }
 
-    pub fn view_matrix(&self) -> Matrix4<f32> {
+    pub fn view_matrix(&self) -> Mat4 {
         self.world_transform().invert().unwrap()
     }
 
-    pub fn projection_matrix(&self) -> Matrix4<f32> {
-        OPENGL_TO_WGPU_MATRIX * perspective(self.fovy, self.aspect, self.znear, self.zfar)
+    pub fn projection_matrix(&self) -> Mat4 {
+        OPENGL_TO_WGPU_MATRIX
+            * cgmath::perspective(self.fov_y, self.aspect, self.z_near, self.z_far)
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
@@ -303,6 +329,7 @@ impl CameraController {
             MouseScrollDelta::LineDelta(_, scroll) => *scroll * 20_f32,
             MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => *scroll as f32,
         };
+        self.zoom = self.zoom.min(100f32).max(-100f32);
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -314,7 +341,7 @@ impl CameraController {
 
         // Update camera position
         let linear_vel = self.speed * dt * if self.keyboard_shift_down { 3.0 } else { 1.0 };
-        let local_camera_translation = Vector3::new(
+        let local_camera_translation = Vec3::new(
             self.keyboard_horizontal * linear_vel,
             self.keyboard_vertical * linear_vel,
             self.keyboard_forward * -linear_vel,
@@ -327,16 +354,16 @@ impl CameraController {
         if self.mouse_yaw.abs() > 0.0 || self.mouse_pitch.abs() > 0.0 {
             let mouse_angular_vel = self.sensitivity * dt;
             self.camera.rotate_by(
-                Rad(-self.mouse_yaw) * mouse_angular_vel,
-                Rad(-self.mouse_pitch) * mouse_angular_vel,
+                rad(-self.mouse_yaw) * mouse_angular_vel,
+                rad(-self.mouse_pitch) * mouse_angular_vel,
             );
         }
 
         if self.keyboard_yaw.abs() > 0.0 || self.keyboard_pitch.abs() > 0.0 {
             let keyboard_angular_vel = self.speed * self.sensitivity * dt;
             self.camera.rotate_by(
-                Rad(self.keyboard_yaw) * keyboard_angular_vel,
-                Rad(self.keyboard_pitch) * keyboard_angular_vel,
+                rad(self.keyboard_yaw) * keyboard_angular_vel,
+                rad(self.keyboard_pitch) * keyboard_angular_vel,
             );
         }
 
@@ -345,11 +372,8 @@ impl CameraController {
         self.mouse_pitch = 0.0;
 
         // Update Field of View
-        let zoom = self.zoom.min(100f32).max(-100f32) / 100f32;
-        let fov: Rad<f32> = (Deg(45.) + Deg(zoom * 30f32)).into();
-        if fov != self.camera.fovy {
-            self.camera.fovy = fov.into();
-        }
+        let fov: Rad = (deg(45.) + deg((self.zoom / 100_f32) * 30f32)).into();
+        self.camera.set_fov_y(fov);
 
         self.camera.update(queue);
     }
