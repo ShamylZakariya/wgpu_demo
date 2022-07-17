@@ -143,19 +143,19 @@ pub async fn load_model(
         .map(|m| {
             let mut vertices = (0..m.mesh.positions.len() / 3)
                 .map(|i| model::ModelVertex {
-                    position: [
+                    position: Point3::new(
                         m.mesh.positions[i * 3],
                         m.mesh.positions[i * 3 + 1],
                         m.mesh.positions[i * 3 + 2],
-                    ],
-                    tex_coords: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
-                    normal: [
+                    ),
+                    tex_coords: Vec2::new(m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]),
+                    normal: Vec3::new(
                         m.mesh.normals[i * 3],
                         m.mesh.normals[i * 3 + 1],
                         m.mesh.normals[i * 3 + 2],
-                    ],
-                    tangent: [0.0; 3],
-                    bitangent: [0.0; 3],
+                    ),
+                    tangent: Vec3::zero(),
+                    bitangent: Vec3::zero(),
                 })
                 .collect::<Vec<_>>();
 
@@ -168,13 +168,13 @@ pub async fn load_model(
                 let v1 = vertices[c[1] as usize];
                 let v2 = vertices[c[2] as usize];
 
-                let pos0: Vec3 = v0.position.into();
-                let pos1: Vec3 = v1.position.into();
-                let pos2: Vec3 = v2.position.into();
+                let pos0: Vec3 = v0.position.to_vec();
+                let pos1: Vec3 = v1.position.to_vec();
+                let pos2: Vec3 = v2.position.to_vec();
 
-                let uv0: Vec2 = v0.tex_coords.into();
-                let uv1: Vec2 = v1.tex_coords.into();
-                let uv2: Vec2 = v2.tex_coords.into();
+                let uv0: Vec2 = v0.tex_coords;
+                let uv1: Vec2 = v1.tex_coords;
+                let uv2: Vec2 = v2.tex_coords;
 
                 let delta_pos1 = pos1 - pos0;
                 let delta_pos2 = pos2 - pos0;
@@ -185,18 +185,12 @@ pub async fn load_model(
                 let tangent = (delta_pos1 * delta_uv2.y - delta_pos2 * delta_uv1.y) * r;
                 let bitangent = (delta_pos2 * delta_uv1.x - delta_pos1 * delta_uv2.x) * -r;
 
-                vertices[c[0] as usize].tangent =
-                    (tangent + Vec3::from(vertices[c[0] as usize].tangent)).into();
-                vertices[c[1] as usize].tangent =
-                    (tangent + Vec3::from(vertices[c[1] as usize].tangent)).into();
-                vertices[c[2] as usize].tangent =
-                    (tangent + Vec3::from(vertices[c[2] as usize].tangent)).into();
-                vertices[c[0] as usize].bitangent =
-                    (bitangent + Vec3::from(vertices[c[0] as usize].bitangent)).into();
-                vertices[c[1] as usize].bitangent =
-                    (bitangent + Vec3::from(vertices[c[1] as usize].bitangent)).into();
-                vertices[c[2] as usize].bitangent =
-                    (bitangent + Vec3::from(vertices[c[2] as usize].bitangent)).into();
+                vertices[c[0] as usize].tangent = tangent + vertices[c[0] as usize].tangent;
+                vertices[c[1] as usize].tangent = tangent + vertices[c[1] as usize].tangent;
+                vertices[c[2] as usize].tangent = tangent + vertices[c[2] as usize].tangent;
+                vertices[c[0] as usize].bitangent = bitangent + vertices[c[0] as usize].bitangent;
+                vertices[c[1] as usize].bitangent = bitangent + vertices[c[1] as usize].bitangent;
+                vertices[c[2] as usize].bitangent = bitangent + vertices[c[2] as usize].bitangent;
 
                 // Used to average the tangents/bitangents
                 triangles_included[c[0] as usize] += 1;
@@ -207,8 +201,8 @@ pub async fn load_model(
             for (i, n) in triangles_included.into_iter().enumerate() {
                 let denom = 1.0 / n as f32;
                 let mut v = &mut vertices[i];
-                v.tangent = (Vec3::from(v.tangent) * denom).normalize().into();
-                v.bitangent = (Vec3::from(v.bitangent) * denom).normalize().into();
+                v.tangent = (v.tangent * denom).normalize();
+                v.bitangent = (v.bitangent * denom).normalize();
             }
 
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

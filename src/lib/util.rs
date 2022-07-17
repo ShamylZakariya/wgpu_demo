@@ -56,19 +56,7 @@ where
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("Uniform Bind Group Layout"),
-        });
+        let bind_group_layout = Self::bind_group_layout(device);
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
@@ -88,12 +76,32 @@ where
         }
     }
 
+    pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("Uniform Bind Group Layout"),
+        })
+    }
+
+    pub fn read(&self) -> &D {
+        &self.data
+    }
+
     pub fn edit(&mut self) -> &mut D {
         self.dirty = true;
         &mut self.data
     }
 
-    pub fn write(&mut self, queue: &mut wgpu::Queue) {
+    pub fn write(&mut self, queue: &wgpu::Queue) {
         if self.dirty {
             queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.data]));
             self.dirty = false

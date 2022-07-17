@@ -100,7 +100,7 @@ fn inverse_lerp(a: f32, b: f32, v: f32) -> f32 {
     return (v - a) / (b - a);
 }
 
-// Returns the light dir depending on light type
+// Returns the light dir depending on light type. Note, this is direction TO the light.
 fn fs_get_light_dir(in: VertexOutput) -> vec3<f32> {
     if (light.light_type == 1 || light.light_type == 2) {
         // point or spot

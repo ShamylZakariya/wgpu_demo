@@ -247,7 +247,7 @@ impl AppState for Compositor {
 
     fn update(&mut self, gpu_state: &mut super::gpu_state::GpuState, dt: instant::Duration) {
         self.time += dt;
-        self.uniform.write(&mut gpu_state.queue);
+        self.uniform.write(&gpu_state.queue);
     }
 
     fn render(
