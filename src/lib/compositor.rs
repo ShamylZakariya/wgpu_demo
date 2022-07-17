@@ -197,7 +197,7 @@ impl Compositor {
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
-                        resource: wgpu::BindingResource::Sampler(&depth_attachment_sampler),
+                        resource: wgpu::BindingResource::Sampler(depth_attachment_sampler),
                     },
                 ],
                 label: Some("Compositor Bind Group"),
