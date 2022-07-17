@@ -37,7 +37,8 @@ where
 
 /// Uniforms is a generic "holder" for uniform data types.
 pub struct UniformWrapper<D> {
-    pub data: D,
+    data: D,
+    dirty: bool,
     pub buffer: wgpu::Buffer,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,
@@ -80,13 +81,22 @@ where
 
         Self {
             data,
+            dirty: true,
             buffer,
             bind_group_layout,
             bind_group,
         }
     }
 
-    pub fn write(&self, queue: &mut wgpu::Queue) {
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.data]));
+    pub fn edit(&mut self) -> &mut D {
+        self.dirty = true;
+        &mut self.data
+    }
+
+    pub fn write(&mut self, queue: &mut wgpu::Queue) {
+        if self.dirty {
+            queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.data]));
+            self.dirty = false
+        }
     }
 }

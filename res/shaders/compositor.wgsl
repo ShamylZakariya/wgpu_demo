@@ -5,8 +5,8 @@ struct VertexOutput {
 };
 
 struct CompositorUniform {
-    // x: z_near, y: z_far (z, w unused)
-    @location(0) camera_z_near_far: vec4<f32>,
+    // x: z_near, y: z_far, z: width in pixels, w: height in pixels
+    @location(0) camera_z_near_far_width_height: vec4<f32>,
 }
 
 @group(0) @binding(0)
@@ -52,10 +52,10 @@ fn compositor_vs_main(
 @fragment
 fn compositor_fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Output color
-    // return textureSample(t_color_attachment, s_color_attachment, in.tex_coord);
+    return textureSample(t_color_attachment, s_color_attachment, in.tex_coord);
 
-    let depth = textureSample(t_depth_attachment, s_depth_attachment, in.tex_coord).r;
-    let linearized = linearize_depth(depth, compositor.camera_z_near_far.x, compositor.camera_z_near_far.y);
-    let color = hsv_to_rgb(vec3<f32>(linearized, 1.0, 1.0));
-    return vec4<f32>(color, 1.0);
+    // let depth = textureSample(t_depth_attachment, s_depth_attachment, in.tex_coord).r;
+    // let linearized = linearize_depth(depth, compositor.camera_z_near_far_width_height.x, compositor.camera_z_near_far_width_height.y);
+    // let color = hsv_to_rgb(vec3<f32>(linearized, 1.0, 1.0));
+    // return vec4<f32>(color, 1.0);
 }

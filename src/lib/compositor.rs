@@ -1,9 +1,21 @@
 use super::{app::AppState, camera::Camera, gpu_state, util::*};
+use cgmath::prelude::*;
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
+#[derive(Copy, Clone, Debug)]
 pub struct CompositorUniformData {
-    camera_z_near_far: [f32; 4],
+    camera_z_near_far_width_height: Vec4,
+}
+
+unsafe impl bytemuck::Pod for CompositorUniformData {}
+unsafe impl bytemuck::Zeroable for CompositorUniformData {}
+
+impl Default for CompositorUniformData {
+    fn default() -> Self {
+        Self {
+            camera_z_near_far_width_height: Vec4::zero(),
+        }
+    }
 }
 
 type CompositorUniform = UniformWrapper<CompositorUniformData>;
@@ -12,7 +24,6 @@ pub struct Compositor {
     size: winit::dpi::PhysicalSize<u32>,
     time: instant::Duration,
     uniform: CompositorUniform,
-    uniform_is_dirty: bool,
     textures_bind_group_layout: wgpu::BindGroupLayout,
     textures_bind_group: wgpu::BindGroup,
     depth_attachment_sampler: wgpu::Sampler,
@@ -149,7 +160,6 @@ impl Compositor {
             size: gpu_state.size(),
             time: instant::Duration::default(),
             uniform,
-            uniform_is_dirty: true,
             textures_bind_group_layout,
             textures_bind_group,
             depth_attachment_sampler,
@@ -163,8 +173,12 @@ impl Compositor {
 
     pub fn read_camera_properties(&mut self, camera: &Camera) {
         let (z_near, z_far) = camera.depth_range();
-        self.uniform.data.camera_z_near_far = Vec4::new(z_near, z_far, 0.0, 0.0).into();
-        self.uniform_is_dirty = true;
+        self.uniform.edit().camera_z_near_far_width_height = Vec4::new(
+            z_near,
+            z_far,
+            self.size.width as f32,
+            self.size.height as f32,
+        );
     }
 
     fn create_textures_bind_group(
@@ -233,10 +247,7 @@ impl AppState for Compositor {
 
     fn update(&mut self, gpu_state: &mut super::gpu_state::GpuState, dt: instant::Duration) {
         self.time += dt;
-        if self.uniform_is_dirty {
-            self.uniform.write(&mut gpu_state.queue);
-            self.uniform_is_dirty = false;
-        }
+        self.uniform.write(&mut gpu_state.queue);
     }
 
     fn render(
