@@ -1,26 +1,83 @@
-use cgmath::prelude::*;
-use wgpu::util::DeviceExt;
-
 use super::util::*;
+use cgmath::prelude::*;
 
 const EPSILON: f32 = 1e-4;
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
-struct LightUniform {
-    position: [f32; 3],
+#[derive(Copy, Clone, Debug)]
+struct LightUniformData {
+    position: Point3,
     _padding1: u32, // uniforms require 16-byte (4 float field spacing)
-    direction: [f32; 3],
+    direction: Vec3,
     _padding2: u32,
-    ambient: [f32; 3],
+    ambient: Vec3,
     _padding3: u32,
-    color: [f32; 3],
+    color: Vec3,
     _padding4: u32,
     // x: constant, y: linear, z: exponential, w: dot spot breadth
-    attenuation: [f32; 4],
+    attenuation: Vec4,
     light_type: i32,
     _padding5: [u32; 3],
 }
+
+unsafe impl bytemuck::Pod for LightUniformData {}
+unsafe impl bytemuck::Zeroable for LightUniformData {}
+
+impl Default for LightUniformData {
+    fn default() -> Self {
+        Self {
+            position: Point3::new(0.0, 0.0, 0.0),
+            direction: Vec3::zero(),
+            ambient: Vec3::zero(),
+            color: Vec3::zero(),
+            attenuation: Vec4::zero(),
+            light_type: 0,
+            _padding1: 0,
+            _padding2: 0,
+            _padding3: 0,
+            _padding4: 0,
+            _padding5: [0; 3],
+        }
+    }
+}
+
+impl LightUniformData {
+    fn set_position(&mut self, position: Point3) -> &mut Self {
+        self.position = position;
+        self
+    }
+
+    fn set_direction(&mut self, direction: Vec3) -> &mut Self {
+        self.direction = direction.normalize();
+        self
+    }
+
+    fn set_ambient(&mut self, ambient: Vec3) -> &mut Self {
+        self.ambient = ambient;
+        self
+    }
+
+    fn set_color(&mut self, color: Vec3) -> &mut Self {
+        self.color = color;
+        self
+    }
+
+    fn set_attenuation(&mut self, attenuation: Vec4) -> &mut Self {
+        self.attenuation = attenuation;
+        self.attenuation.x = self.attenuation.x.max(0.0);
+        self.attenuation.y = self.attenuation.y.max(0.0);
+        self.attenuation.z = self.attenuation.z.max(0.0);
+        self.attenuation.w = self.attenuation.w.max(0.0);
+        self
+    }
+
+    fn set_light_type(&mut self, light_type: LightType) -> &mut Self {
+        self.light_type = light_type.into();
+        self
+    }
+}
+
+type LightUniform = UniformWrapper<LightUniformData>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LightType {
@@ -80,125 +137,77 @@ pub struct DirectionalLightDescriptor {
 
 pub struct Light {
     light_type: LightType,
-    position: Point3,
-    direction: Vec3,
-    ambient: Vec3,
-    color: Vec3,
-    constant_attenuation: f32,
-    linear_attenuation: f32,
-    exponential_attenuation: f32,
-    spot_breadth: Deg,
-
-    is_dirty: bool,
-    buffer: wgpu::Buffer,
     uniform: LightUniform,
-    bind_group: wgpu::BindGroup,
 }
 
 impl Light {
     pub fn new_ambient(device: &wgpu::Device, desc: &AmbientLightDescriptor) -> Self {
-        let (buffer, bind_group, uniform) = Self::create_resources(device);
-
+        let mut uniform = LightUniform::new(device);
+        uniform
+            .edit()
+            .set_light_type(LightType::Ambient)
+            .set_ambient(desc.ambient)
+            .set_attenuation(Vec4::new(1.0, 0.0, 0.0, 0.0));
         Self {
             light_type: LightType::Ambient,
-            position: [0_f32; 3].into(),
-            direction: Vec3::zero(),
-            ambient: desc.ambient,
-            color: Vec3::zero(),
-            constant_attenuation: 1_f32,
-            linear_attenuation: 0_f32,
-            exponential_attenuation: 0_f32,
-            spot_breadth: deg(0_f32),
-            is_dirty: true,
-            buffer,
             uniform,
-            bind_group,
         }
     }
 
     pub fn new_point(device: &wgpu::Device, desc: &PointLightDescriptor) -> Self {
-        let (buffer, bind_group, uniform) = Self::create_resources(device);
-
+        let mut uniform = LightUniform::new(device);
+        uniform
+            .edit()
+            .set_light_type(LightType::Point)
+            .set_position(desc.position)
+            .set_ambient(desc.ambient)
+            .set_color(desc.color)
+            .set_attenuation(Vec4::new(
+                desc.constant_attenuation,
+                desc.linear_attenuation,
+                desc.exponential_attenuation,
+                0.0,
+            ));
         Self {
             light_type: LightType::Point,
-            position: desc.position,
-            direction: Vec3::zero(),
-            ambient: desc.ambient,
-            color: desc.color,
-            constant_attenuation: desc.constant_attenuation.max(0_f32),
-            linear_attenuation: desc.linear_attenuation.max(0_f32),
-            exponential_attenuation: desc.exponential_attenuation.max(0_f32),
-            spot_breadth: deg(0_f32),
-            is_dirty: true,
-            buffer,
             uniform,
-            bind_group,
         }
     }
 
     pub fn new_spot(device: &wgpu::Device, desc: &SpotLightDescriptor) -> Self {
-        let (buffer, bind_group, uniform) = Self::create_resources(device);
-
+        let mut uniform = LightUniform::new(device);
+        uniform
+            .edit()
+            .set_light_type(LightType::Spot)
+            .set_position(desc.position)
+            .set_direction(desc.direction)
+            .set_ambient(desc.ambient)
+            .set_color(desc.color)
+            .set_attenuation(Vec4::new(
+                desc.constant_attenuation,
+                desc.linear_attenuation,
+                desc.exponential_attenuation,
+                desc.spot_breadth.cos(),
+            ));
         Self {
             light_type: LightType::Spot,
-            position: desc.position,
-            direction: desc.direction.normalize(),
-            ambient: desc.ambient,
-            color: desc.color,
-            constant_attenuation: desc.constant_attenuation.max(0_f32),
-            linear_attenuation: desc.linear_attenuation.max(0_f32),
-            exponential_attenuation: desc.exponential_attenuation.max(0_f32),
-            spot_breadth: desc.spot_breadth,
-            is_dirty: true,
-            buffer,
             uniform,
-            bind_group,
         }
     }
 
     pub fn new_directional(device: &wgpu::Device, desc: &DirectionalLightDescriptor) -> Self {
-        let (buffer, bind_group, uniform) = Self::create_resources(device);
-
+        let mut uniform = LightUniform::new(device);
+        uniform
+            .edit()
+            .set_light_type(LightType::Directional)
+            .set_direction(desc.direction)
+            .set_ambient(desc.ambient)
+            .set_color(desc.color)
+            .set_attenuation(Vec4::new(desc.constant_attenuation, 0.0, 0.0, 0.0));
         Self {
             light_type: LightType::Directional,
-            position: [0_f32; 3].into(),
-            direction: desc.direction.normalize(),
-            ambient: desc.ambient,
-            color: desc.color,
-            constant_attenuation: desc.constant_attenuation.max(0_f32),
-            linear_attenuation: 0_f32,
-            exponential_attenuation: 0_f32,
-            spot_breadth: deg(0_f32),
-            is_dirty: true,
-            buffer,
             uniform,
-            bind_group,
         }
-    }
-
-    fn create_resources(device: &wgpu::Device) -> (wgpu::Buffer, wgpu::BindGroup, LightUniform) {
-        // we can an empty uniform buffer here because we'll update it later in ::update()
-        let uniform = LightUniform::default();
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Light::buffer"),
-            contents: bytemuck::cast_slice(&[uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &Light::bind_group_layout(device),
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-            label: Some("Light::bind_group"),
-        });
-
-        (buffer, bind_group, uniform)
-    }
-
-    pub fn is_dirty(&self) -> bool {
-        self.is_dirty
     }
 
     pub fn light_type(&self) -> LightType {
@@ -206,157 +215,106 @@ impl Light {
     }
 
     pub fn ambient(&self) -> Vec3 {
-        self.ambient
+        self.uniform.read().ambient
     }
 
     pub fn set_ambient<V: Into<Vec3>>(&mut self, ambient: V) {
         let new_ambient: Vec3 = ambient.into();
-        if new_ambient.distance2(self.ambient) > EPSILON {
-            self.ambient = new_ambient;
-            self.is_dirty = true;
+        if new_ambient.distance2(self.ambient()) > EPSILON {
+            self.uniform.edit().set_ambient(new_ambient);
         }
     }
 
     pub fn position(&self) -> Point3 {
-        self.position
+        self.uniform.read().position
     }
 
     pub fn set_position<P: Into<Point3>>(&mut self, position: P) {
         let new_position: Point3 = position.into();
-        if new_position.distance2(self.position) > EPSILON {
-            self.position = new_position;
-            self.is_dirty = true;
+        if new_position.distance2(self.position()) > EPSILON {
+            self.uniform.edit().set_position(new_position);
         }
     }
 
     pub fn direction(&self) -> Vec3 {
-        self.direction
+        self.uniform.read().direction
     }
 
     pub fn set_direction<V: Into<Vec3>>(&mut self, dir: V) {
         let new_dir: Vec3 = dir.into();
-        if new_dir.distance2(self.direction) > EPSILON {
-            self.direction = new_dir;
-            self.is_dirty = true;
+        if new_dir.distance2(self.direction()) > EPSILON {
+            self.uniform.edit().set_direction(new_dir);
         }
     }
 
     pub fn color(&self) -> Vec3 {
-        self.color
+        self.uniform.read().color
     }
 
     pub fn set_color<V: Into<Vec3>>(&mut self, color: V) {
         let new_color: Vec3 = color.into();
-        if new_color.distance2(self.color) > EPSILON {
-            self.color = new_color;
-            self.is_dirty = true;
+        if new_color.distance2(self.color()) > EPSILON {
+            self.uniform.edit().set_color(new_color);
         }
     }
 
     pub fn constant_attenuation(&self) -> f32 {
-        self.constant_attenuation
+        self.uniform.read().attenuation.x
     }
 
     pub fn set_constant_attenuation(&mut self, constant_attenuation: f32) {
-        if (constant_attenuation - self.constant_attenuation).abs() > EPSILON {
-            self.constant_attenuation = constant_attenuation;
-            self.is_dirty = true;
+        let mut attenuation = self.uniform.read().attenuation;
+        if (constant_attenuation - attenuation.x).abs() > EPSILON {
+            attenuation.x = constant_attenuation;
+            self.uniform.edit().set_attenuation(attenuation);
         }
     }
 
     pub fn linear_attenuation(&self) -> f32 {
-        self.linear_attenuation
+        self.uniform.read().attenuation.y
     }
 
     pub fn set_linear_attenuation(&mut self, linear_attenuation: f32) {
-        if (linear_attenuation - self.linear_attenuation).abs() > EPSILON {
-            self.linear_attenuation = linear_attenuation;
-            self.is_dirty = true;
+        let mut attenuation = self.uniform.read().attenuation;
+        if (linear_attenuation - attenuation.x).abs() > EPSILON {
+            attenuation.y = linear_attenuation;
+            self.uniform.edit().set_attenuation(attenuation);
         }
     }
 
     pub fn exponential_attenuation(&self) -> f32 {
-        self.exponential_attenuation
+        self.uniform.read().attenuation.z
     }
 
     pub fn set_exponential_attenuation(&mut self, exponential_attenuation: f32) {
-        if (exponential_attenuation - self.exponential_attenuation).abs() > EPSILON {
-            self.exponential_attenuation = exponential_attenuation;
-            self.is_dirty = true;
+        let mut attenuation = self.uniform.read().attenuation;
+        if (exponential_attenuation - attenuation.x).abs() > EPSILON {
+            attenuation.z = exponential_attenuation;
+            self.uniform.edit().set_attenuation(attenuation);
         }
     }
 
     pub fn spot_breadth(&self) -> Deg {
-        self.spot_breadth
+        deg(self.uniform.read().attenuation.w.acos())
     }
 
     pub fn set_spot_breadth(&mut self, spot_breadth: Deg) {
-        if spot_breadth != self.spot_breadth {
-            self.spot_breadth = spot_breadth;
-            self.is_dirty = true;
+        if spot_breadth != self.spot_breadth() {
+            let mut attenuation = self.uniform.read().attenuation;
+            attenuation.w = spot_breadth.cos();
+            self.uniform.edit().attenuation = attenuation;
         }
     }
 
     pub fn update(&mut self, queue: &wgpu::Queue) {
-        if !self.is_dirty {
-            return;
-        }
-
-        // Update the uniform buffer and write it
-        self.uniform.light_type = self.light_type.into();
-        self.uniform.ambient = color3(self.ambient).into();
-        self.uniform.color = color3(self.color).into();
-
-        match self.light_type {
-            LightType::Ambient => {
-                self.uniform.attenuation = [1_f32, 0_f32, 0_f32, 0_f32];
-            }
-            LightType::Point => {
-                self.uniform.position = self.position.into();
-                self.uniform.attenuation = [
-                    self.constant_attenuation.max(0_f32),
-                    self.linear_attenuation.max(0_f32),
-                    self.exponential_attenuation.max(0_f32),
-                    0_f32,
-                ];
-            }
-            LightType::Spot => {
-                self.uniform.position = self.position.into();
-                self.uniform.direction = self.direction.normalize().into();
-                self.uniform.attenuation = [
-                    self.constant_attenuation.max(0_f32),
-                    self.linear_attenuation.max(0_f32),
-                    self.exponential_attenuation.max(0_f32),
-                    self.spot_breadth.cos(),
-                ];
-            }
-            LightType::Directional => {
-                self.uniform.direction = self.direction.normalize().into();
-                self.uniform.attenuation =
-                    [self.constant_attenuation.max(0_f32), 0_f32, 0_f32, 0_f32];
-            }
-        }
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform]));
-        self.is_dirty = false;
+        self.uniform.write(queue);
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.bind_group
+        &self.uniform.bind_group
     }
 
     pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("Light::bind_group_layout"),
-        })
+        LightUniform::bind_group_layout(device)
     }
 }

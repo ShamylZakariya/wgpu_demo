@@ -50,10 +50,7 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-Render to Texture
-
-- made pub Vec3 Vec4 types, should try using them
-- can my Uniform structs use Vec3, Vec4 instead of the array syntax? Might make life easier
+- investigate migration to `tao` from winit.
 
 THEN we can use "camera" with depth textures to render shadows
 
@@ -65,3 +62,7 @@ THEN we can use "camera" with depth textures to render shadows
 Do I want a GUI?
 	- https://github.com/emilk/egui#example
 Things and stuff and people and places....
+
+## Remember
+
+uniforms require 16-byte (4 float field spacing)

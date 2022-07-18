@@ -18,14 +18,17 @@ static MODEL_VERTEX_ATTRIBS: [wgpu::VertexAttribute; 5] = vertex_attr_array![0 =
 static MODEL_INSTANCE_ATTRIBS: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x3, 10 => Float32x3, 11 => Float32x3, ];
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone)]
 pub struct ModelVertex {
-    pub position: [f32; 3],
-    pub tex_coords: [f32; 2],
-    pub normal: [f32; 3],
-    pub tangent: [f32; 3],
-    pub bitangent: [f32; 3],
+    pub position: Point3,
+    pub tex_coords: Vec2,
+    pub normal: Vec3,
+    pub tangent: Vec3,
+    pub bitangent: Vec3,
 }
+
+unsafe impl bytemuck::Pod for ModelVertex {}
+unsafe impl bytemuck::Zeroable for ModelVertex {}
 
 impl ModelVertex {
     fn vertex_buffer_layout<'a>() -> wgpu::VertexBufferLayout<'a> {
@@ -58,10 +61,9 @@ impl Instance {
     }
 
     fn as_data(&self) -> InstanceData {
-        let model = Mat4::from_translation(self.position.to_vec()) * Mat4::from(self.rotation);
         InstanceData {
-            model: model.into(),
-            normal_matrix: Mat3::from(self.rotation).into(),
+            model: Mat4::from_translation(self.position.to_vec()) * Mat4::from(self.rotation),
+            normal_matrix: Mat3::from(self.rotation),
         }
     }
 
@@ -75,10 +77,22 @@ impl Instance {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone)]
 struct InstanceData {
-    model: [[f32; 4]; 4],
-    normal_matrix: [[f32; 3]; 3],
+    model: Mat4,
+    normal_matrix: Mat3,
+}
+
+unsafe impl bytemuck::Pod for InstanceData {}
+unsafe impl bytemuck::Zeroable for InstanceData {}
+
+impl Default for InstanceData {
+    fn default() -> Self {
+        Self {
+            model: Mat4::identity(),
+            normal_matrix: Mat3::identity(),
+        }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -92,13 +106,29 @@ pub struct Mesh {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, Default)]
+#[derive(Copy, Clone)]
 pub struct MaterialUniform {
-    ambient: [f32; 4],
-    diffuse: [f32; 4],
-    specular: [f32; 4],
+    ambient: Vec4,
+    diffuse: Vec4,
+    specular: Vec4,
     shininess: f32,
     _padding: [f32; 3],
+}
+
+unsafe impl bytemuck::Pod for MaterialUniform {}
+unsafe impl bytemuck::Zeroable for MaterialUniform {}
+
+impl Default for MaterialUniform {
+    fn default() -> Self {
+        let one = Vec4::new(1.0, 1.0, 1.0, 1.0);
+        Self {
+            ambient: one,
+            diffuse: one,
+            specular: one,
+            shininess: 1.0,
+            _padding: Default::default(),
+        }
+    }
 }
 
 pub struct MaterialProperties<'a> {
@@ -151,9 +181,9 @@ impl Material {
         let mut base_id = String::new();
 
         let material_uniform = MaterialUniform {
-            ambient: color4(properties.ambient).into(),
-            diffuse: color4(properties.diffuse).into(),
-            specular: color4(properties.specular).into(),
+            ambient: color4(properties.ambient),
+            diffuse: color4(properties.diffuse),
+            specular: color4(properties.specular),
             shininess: properties.shininess,
             ..Default::default()
         };

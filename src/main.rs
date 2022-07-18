@@ -17,12 +17,7 @@ where
 {
     let instances: Vec<_> = positions
         .iter()
-        .map(|p| {
-            model::Instance::new(
-                (*p).into(),
-                Quat::from_axis_angle(Vec3::unit_z(), deg(0.0)),
-            )
-        })
+        .map(|p| model::Instance::new((*p).into(), Quat::from_axis_angle(Vec3::unit_z(), deg(0.0))))
         .collect();
 
     resources::load_model_sync(
@@ -82,10 +77,10 @@ fn main() {
             let directional_light = light::Light::new_directional(
                 &gpu_state.device,
                 &light::DirectionalLightDescriptor {
-                    direction: (1.0, 1.0, 1.0).into(),
+                    direction: (1.0, 1.0, 0.0).into(),
                     ambient: (0.0, 0.0, 0.0).into(),
                     color: (0.0, 0.0, 1.0).into(),
-                    constant_attenuation: 2.0,
+                    constant_attenuation: 1.0,
                 },
             );
 

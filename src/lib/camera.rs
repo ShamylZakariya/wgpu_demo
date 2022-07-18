@@ -3,7 +3,6 @@ use cgmath::prelude::*;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
 use std::ops::Mul;
-use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalPosition;
 use winit::event::*;
 
@@ -20,34 +19,40 @@ const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
 ///////////////////////////////////////////////
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
-struct CameraUniform {
-    view_position: [f32; 4],
-    view_proj: [[f32; 4]; 4],
+#[derive(Debug, Clone, Copy)]
+struct CameraUniformData {
+    view_position: Vec4,
+    view_proj: Mat4,
 }
 
-impl CameraUniform {
-    fn new() -> Self {
+unsafe impl bytemuck::Pod for CameraUniformData {}
+unsafe impl bytemuck::Zeroable for CameraUniformData {}
+
+impl Default for CameraUniformData {
+    fn default() -> Self {
         Self {
-            view_position: Vec4::zero().into(),
-            view_proj: Mat4::identity().into(),
+            view_position: Vec4::zero(),
+            view_proj: Mat4::identity(),
         }
     }
+}
 
+impl CameraUniformData {
     fn update_view_proj(
         &mut self,
         camera_position: Point3,
         camera_projection: Mat4,
         camera_view: Mat4,
     ) {
-        self.view_position = camera_position.to_homogeneous().into();
-        self.view_proj = (camera_projection * camera_view).into();
+        self.view_position = camera_position.to_homogeneous();
+        self.view_proj = camera_projection * camera_view;
     }
 }
 
+type CameraUniform = UniformWrapper<CameraUniformData>;
+
 ///////////////////////////////////////////////
 
-#[derive(Debug)]
 pub struct Camera {
     // world view
     position: Point3,
@@ -61,9 +66,7 @@ pub struct Camera {
 
     // uniform storage
     is_dirty: bool,
-    buffer: wgpu::Buffer,
-    uniform_data: CameraUniform,
-    bind_group: wgpu::BindGroup,
+    uniform: CameraUniform,
 }
 
 impl Camera {
@@ -75,21 +78,7 @@ impl Camera {
         z_near: f32,
         z_far: f32,
     ) -> Self {
-        let uniform_data = CameraUniform::new();
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Camera::buffer"),
-            contents: bytemuck::cast_slice(&[uniform_data]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &Self::bind_group_layout(device),
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-            label: Some("Camera::bind_group"),
-        });
+        let uniform = CameraUniform::new(device);
 
         Self {
             position: Point3::new(0.0, 0.0, 0.0),
@@ -99,20 +88,19 @@ impl Camera {
             z_near,
             z_far,
             is_dirty: true,
-            buffer,
-            uniform_data,
-            bind_group,
+            uniform,
         }
     }
 
     pub fn update(&mut self, queue: &wgpu::Queue) {
         if self.is_dirty {
-            self.uniform_data.update_view_proj(
-                self.position,
-                self.projection_matrix(),
-                self.view_matrix(),
-            );
-            queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform_data]));
+            let position = self.position;
+            let projection = self.projection_matrix();
+            let view = self.view_matrix();
+            self.uniform
+                .edit()
+                .update_view_proj(position, projection, view);
+            self.uniform.write(queue);
             self.is_dirty = false;
         }
     }
@@ -204,29 +192,16 @@ impl Camera {
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.bind_group
+        &self.uniform.bind_group
     }
 
     pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("CameraController::bind_group_layout"),
-        })
+        CameraUniform::bind_group_layout(device)
     }
 }
 
 ///////////////////////////////////////////////
 
-#[derive(Debug)]
 pub struct CameraController {
     keyboard_horizontal: f32,
     keyboard_forward: f32,
