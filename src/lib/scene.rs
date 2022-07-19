@@ -145,63 +145,61 @@ impl app::AppState for Scene {
         encoder: &mut wgpu::CommandEncoder,
         _output: &wgpu::SurfaceTexture,
     ) {
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Ambient Render Pass"),
-                color_attachments: &[
-                    // this is output [[location(0)]]
-                    Some(wgpu::RenderPassColorAttachment {
-                        view: &gpu_state.color_attachment.view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                g: 0.1,
-                                r: 0.1,
-                                b: 0.1,
-                                a: 1.0,
-                            }),
-                            store: true,
-                        },
-                    }),
-                ],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &gpu_state.depth_attachment.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Ambient Render Pass"),
+            color_attachments: &[
+                // this is output [[location(0)]]
+                Some(wgpu::RenderPassColorAttachment {
+                    view: &gpu_state.color_attachment.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            g: 0.1,
+                            r: 0.1,
+                            b: 0.1,
+                            a: 1.0,
+                        }),
                         store: true,
-                    }),
-                    stencil_ops: None,
+                    },
                 }),
-            });
+            ],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &gpu_state.depth_attachment.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
+        });
 
-            // Render ambient pass
+        // Render ambient pass
+        for model in self.models.values() {
+            model::draw_model(
+                &mut render_pass,
+                &gpu_state.pipeline_vendor,
+                model,
+                &self.camera_controller,
+                &self.ambient_light,
+                &render_pipeline::Pass::Ambient,
+            );
+        }
+
+        // Render lit passes (skipping ambient since they're rolled into self.ambient_light)
+        for light in self
+            .lights
+            .values()
+            .filter(|l| l.light_type() != light::LightType::Ambient)
+        {
             for model in self.models.values() {
                 model::draw_model(
                     &mut render_pass,
                     &gpu_state.pipeline_vendor,
                     model,
                     &self.camera_controller,
-                    &self.ambient_light,
-                    &render_pipeline::Pass::Ambient,
+                    light,
+                    &render_pipeline::Pass::Lit,
                 );
-            }
-
-            // Render lit passes (skipping ambient since they're rolled into self.ambient_light)
-            for light in self
-                .lights
-                .values()
-                .filter(|l| l.light_type() != light::LightType::Ambient)
-            {
-                for model in self.models.values() {
-                    model::draw_model(
-                        &mut render_pass,
-                        &gpu_state.pipeline_vendor,
-                        model,
-                        &self.camera_controller,
-                        light,
-                        &render_pipeline::Pass::Lit,
-                    );
-                }
             }
         }
     }

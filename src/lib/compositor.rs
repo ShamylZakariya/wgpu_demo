@@ -173,7 +173,7 @@ impl Compositor {
 
     pub fn read_camera_properties(&mut self, camera: &Camera) {
         let (z_near, z_far) = camera.depth_range();
-        self.uniform.edit().camera_z_near_far_width_height = Vec4::new(
+        self.uniform.get_mut().camera_z_near_far_width_height = Vec4::new(
             z_near,
             z_far,
             self.size.width as f32,

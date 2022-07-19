@@ -92,15 +92,24 @@ where
         })
     }
 
-    pub fn read(&self) -> &D {
+    /// Return a reference to the underlying data
+    pub fn get(&self) -> &D {
         &self.data
     }
 
-    pub fn edit(&mut self) -> &mut D {
+    /// Return a mutable reference to underlying data, and
+    /// mark the store as dirty. Subsequent calls to write()
+    /// will actually submit the data to the queue.
+    pub fn get_mut(&mut self) -> &mut D {
         self.dirty = true;
         &mut self.data
     }
 
+    /// Write the underlying data to the queue, if it has
+    /// been mutated. By default, a freshly created UniformWrapper
+    /// is marked dirty, and any calls to get_mut() will mark the
+    /// data as dirty. After a write, the dirty flag is unset, until
+    /// any calls to get_mut reflag it to dirty
     pub fn write(&mut self, queue: &wgpu::Queue) {
         if self.dirty {
             queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.data]));

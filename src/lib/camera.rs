@@ -98,7 +98,7 @@ impl Camera {
             let projection = self.projection_matrix();
             let view = self.view_matrix();
             self.uniform
-                .edit()
+                .get_mut()
                 .update_view_proj(position, projection, view);
             self.uniform.write(queue);
             self.is_dirty = false;

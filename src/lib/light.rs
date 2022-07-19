@@ -144,7 +144,7 @@ impl Light {
     pub fn new_ambient(device: &wgpu::Device, desc: &AmbientLightDescriptor) -> Self {
         let mut uniform = LightUniform::new(device);
         uniform
-            .edit()
+            .get_mut()
             .set_light_type(LightType::Ambient)
             .set_ambient(desc.ambient)
             .set_attenuation(Vec4::new(1.0, 0.0, 0.0, 0.0));
@@ -157,7 +157,7 @@ impl Light {
     pub fn new_point(device: &wgpu::Device, desc: &PointLightDescriptor) -> Self {
         let mut uniform = LightUniform::new(device);
         uniform
-            .edit()
+            .get_mut()
             .set_light_type(LightType::Point)
             .set_position(desc.position)
             .set_ambient(desc.ambient)
@@ -177,7 +177,7 @@ impl Light {
     pub fn new_spot(device: &wgpu::Device, desc: &SpotLightDescriptor) -> Self {
         let mut uniform = LightUniform::new(device);
         uniform
-            .edit()
+            .get_mut()
             .set_light_type(LightType::Spot)
             .set_position(desc.position)
             .set_direction(desc.direction)
@@ -198,7 +198,7 @@ impl Light {
     pub fn new_directional(device: &wgpu::Device, desc: &DirectionalLightDescriptor) -> Self {
         let mut uniform = LightUniform::new(device);
         uniform
-            .edit()
+            .get_mut()
             .set_light_type(LightType::Directional)
             .set_direction(desc.direction)
             .set_ambient(desc.ambient)
@@ -215,94 +215,94 @@ impl Light {
     }
 
     pub fn ambient(&self) -> Vec3 {
-        self.uniform.read().ambient
+        self.uniform.get().ambient
     }
 
     pub fn set_ambient<V: Into<Vec3>>(&mut self, ambient: V) {
         let new_ambient: Vec3 = ambient.into();
         if new_ambient.distance2(self.ambient()) > EPSILON {
-            self.uniform.edit().set_ambient(new_ambient);
+            self.uniform.get_mut().set_ambient(new_ambient);
         }
     }
 
     pub fn position(&self) -> Point3 {
-        self.uniform.read().position
+        self.uniform.get().position
     }
 
     pub fn set_position<P: Into<Point3>>(&mut self, position: P) {
         let new_position: Point3 = position.into();
         if new_position.distance2(self.position()) > EPSILON {
-            self.uniform.edit().set_position(new_position);
+            self.uniform.get_mut().set_position(new_position);
         }
     }
 
     pub fn direction(&self) -> Vec3 {
-        self.uniform.read().direction
+        self.uniform.get().direction
     }
 
     pub fn set_direction<V: Into<Vec3>>(&mut self, dir: V) {
         let new_dir: Vec3 = dir.into();
         if new_dir.distance2(self.direction()) > EPSILON {
-            self.uniform.edit().set_direction(new_dir);
+            self.uniform.get_mut().set_direction(new_dir);
         }
     }
 
     pub fn color(&self) -> Vec3 {
-        self.uniform.read().color
+        self.uniform.get().color
     }
 
     pub fn set_color<V: Into<Vec3>>(&mut self, color: V) {
         let new_color: Vec3 = color.into();
         if new_color.distance2(self.color()) > EPSILON {
-            self.uniform.edit().set_color(new_color);
+            self.uniform.get_mut().set_color(new_color);
         }
     }
 
     pub fn constant_attenuation(&self) -> f32 {
-        self.uniform.read().attenuation.x
+        self.uniform.get().attenuation.x
     }
 
     pub fn set_constant_attenuation(&mut self, constant_attenuation: f32) {
-        let mut attenuation = self.uniform.read().attenuation;
+        let mut attenuation = self.uniform.get().attenuation;
         if (constant_attenuation - attenuation.x).abs() > EPSILON {
             attenuation.x = constant_attenuation;
-            self.uniform.edit().set_attenuation(attenuation);
+            self.uniform.get_mut().set_attenuation(attenuation);
         }
     }
 
     pub fn linear_attenuation(&self) -> f32 {
-        self.uniform.read().attenuation.y
+        self.uniform.get().attenuation.y
     }
 
     pub fn set_linear_attenuation(&mut self, linear_attenuation: f32) {
-        let mut attenuation = self.uniform.read().attenuation;
+        let mut attenuation = self.uniform.get().attenuation;
         if (linear_attenuation - attenuation.x).abs() > EPSILON {
             attenuation.y = linear_attenuation;
-            self.uniform.edit().set_attenuation(attenuation);
+            self.uniform.get_mut().set_attenuation(attenuation);
         }
     }
 
     pub fn exponential_attenuation(&self) -> f32 {
-        self.uniform.read().attenuation.z
+        self.uniform.get().attenuation.z
     }
 
     pub fn set_exponential_attenuation(&mut self, exponential_attenuation: f32) {
-        let mut attenuation = self.uniform.read().attenuation;
+        let mut attenuation = self.uniform.get().attenuation;
         if (exponential_attenuation - attenuation.x).abs() > EPSILON {
             attenuation.z = exponential_attenuation;
-            self.uniform.edit().set_attenuation(attenuation);
+            self.uniform.get_mut().set_attenuation(attenuation);
         }
     }
 
     pub fn spot_breadth(&self) -> Deg {
-        deg(self.uniform.read().attenuation.w.acos())
+        deg(self.uniform.get().attenuation.w.acos())
     }
 
     pub fn set_spot_breadth(&mut self, spot_breadth: Deg) {
         if spot_breadth != self.spot_breadth() {
-            let mut attenuation = self.uniform.read().attenuation;
+            let mut attenuation = self.uniform.get().attenuation;
             attenuation.w = spot_breadth.cos();
-            self.uniform.edit().attenuation = attenuation;
+            self.uniform.get_mut().attenuation = attenuation;
         }
     }
 

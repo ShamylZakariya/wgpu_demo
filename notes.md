@@ -50,6 +50,13 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
+- right now we pass an `output` to render() calls. Would be smarter to pass a tuple of texture views, e.g., (color: TextureView, depth: Option<TextureView>)
+	- when drawing scene, we'd pass (color_attachment.view, Some(depth_attachment.view))
+	- when drawing compositor, we'd pass output.texture.create_view()...
+
+- we probably want an array of cameras, and to draw them in a loop, but this can wait
+	- would be nice to have a "main" camera
+
 - investigate migration to `tao` from winit.
 
 THEN we can use "camera" with depth textures to render shadows
