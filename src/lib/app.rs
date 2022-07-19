@@ -1,7 +1,8 @@
-use winit::{
+use tao::{
     dpi::PhysicalSize,
     event::*,
     event_loop::{ControlFlow, EventLoop},
+    keyboard::KeyCode,
     window::WindowBuilder,
 };
 
@@ -14,12 +15,12 @@ pub trait AppState {
     fn resize(
         &mut self,
         gpu_state: &mut gpu_state::GpuState,
-        new_size: winit::dpi::PhysicalSize<u32>,
+        new_size: tao::dpi::PhysicalSize<u32>,
     );
     fn size(&self) -> PhysicalSize<u32>;
     fn input(
         &mut self,
-        event: Option<&winit::event::WindowEvent>,
+        event: Option<&tao::event::WindowEvent>,
         mouse_motion: Option<(f64, f64)>,
     ) -> bool;
     fn update(&mut self, gpu_state: &mut gpu_state::GpuState, dt: instant::Duration);
@@ -33,7 +34,7 @@ pub trait AppState {
 
 pub async fn run<F, U>(factory: F, update: U)
 where
-    F: Fn(&winit::window::Window, &mut GpuState) -> Scene,
+    F: Fn(&tao::window::Window, &mut GpuState) -> Scene,
     U: 'static + Fn(&mut Scene),
 {
     let event_loop = EventLoop::new();
@@ -50,9 +51,12 @@ where
     // start even loop
     let mut last_render_time = instant::Instant::now();
 
-    event_loop.run(move |event, _, control_flow| match event {
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
+
+        match event {
         Event::DeviceEvent {
-                event: DeviceEvent::MouseMotion{ delta, },
+                event: DeviceEvent::MouseMotion{ delta, .. },
                 .. // We're not using device_id currently
             } => {
                 if !scene.input(None, Some(delta)) {
@@ -106,18 +110,16 @@ where
         Event::WindowEvent {
                 ref event,
                 window_id,
+                ..
             } if window_id == window.id() && !scene.input(Some(event), None) => {
                 match event {
-                    WindowEvent::CloseRequested
-                    | WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            },
-                        ..
-                    } => *control_flow = ControlFlow::Exit,
+                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                    WindowEvent::KeyboardInput { event, .. } => {
+                        match event.physical_key {
+                            KeyCode::Escape => *control_flow = ControlFlow::Exit,
+                            _ => ()
+                        }
+                    }
                     WindowEvent::Resized(physical_size) => {
                         gpu_state.resize(*physical_size);
                         scene.resize(&mut gpu_state, *physical_size);
@@ -132,5 +134,6 @@ where
                 }
             }
         _ => {}
+    }
     });
 }

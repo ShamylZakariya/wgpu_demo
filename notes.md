@@ -58,6 +58,10 @@ Make a post processing "stack" which can ping pong between two intermediate text
 	- would be nice to have a "main" camera
 
 - investigate migration to `tao` from winit.
+	- HORRIBLE flicker
+	- mouse input not working
+
+- wgsl spec says we can use mat4x4<f32>, mat3x3<f32>
 
 THEN we can use "camera" with depth textures to render shadows
 

@@ -3,8 +3,9 @@ use cgmath::prelude::*;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
 use std::ops::Mul;
-use winit::dpi::PhysicalPosition;
-use winit::event::*;
+use tao::dpi::PhysicalPosition;
+use tao::event::*;
+use tao::keyboard::KeyCode;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: Mat4 = Mat4::new(
@@ -239,54 +240,54 @@ impl CameraController {
         &self.camera
     }
 
-    pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
+    pub fn process_keyboard(&mut self, key: KeyCode, state: ElementState) -> bool {
         let (amount, pressed) = if state == ElementState::Pressed {
             (1.0, true)
         } else {
             (0.0, false)
         };
         match key {
-            VirtualKeyCode::W => {
+            KeyCode::KeyW => {
                 self.keyboard_forward = amount;
                 true
             }
-            VirtualKeyCode::S => {
+            KeyCode::KeyS => {
                 self.keyboard_forward = -amount;
                 true
             }
-            VirtualKeyCode::A => {
+            KeyCode::KeyA => {
                 self.keyboard_horizontal = -amount;
                 true
             }
-            VirtualKeyCode::D => {
+            KeyCode::KeyD => {
                 self.keyboard_horizontal = amount;
                 true
             }
-            VirtualKeyCode::E => {
+            KeyCode::KeyE => {
                 self.keyboard_vertical = amount;
                 true
             }
-            VirtualKeyCode::Q => {
+            KeyCode::KeyQ => {
                 self.keyboard_vertical = -amount;
                 true
             }
-            VirtualKeyCode::Up => {
+            KeyCode::ArrowUp => {
                 self.keyboard_pitch = amount;
                 true
             }
-            VirtualKeyCode::Down => {
+            KeyCode::ArrowDown => {
                 self.keyboard_pitch = -amount;
                 true
             }
-            VirtualKeyCode::Left => {
+            KeyCode::ArrowLeft => {
                 self.keyboard_yaw = amount;
                 true
             }
-            VirtualKeyCode::Right => {
+            KeyCode::ArrowRight => {
                 self.keyboard_yaw = -amount;
                 true
             }
-            VirtualKeyCode::LShift => {
+            KeyCode::ShiftLeft | KeyCode::ShiftRight => {
                 self.keyboard_shift_down = pressed;
                 true
             }
@@ -303,11 +304,12 @@ impl CameraController {
         self.zoom += match delta {
             MouseScrollDelta::LineDelta(_, scroll) => *scroll * 20_f32,
             MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => *scroll as f32,
+            _ => unimplemented!("Received unexpected mouse scroll delta: {:?}", delta),
         };
         self.zoom = self.zoom.min(100f32).max(-100f32);
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub fn resize(&mut self, new_size: tao::dpi::PhysicalSize<u32>) {
         self.camera.resize(new_size.width, new_size.height);
     }
 

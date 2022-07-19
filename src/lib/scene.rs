@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use cgmath::prelude::*;
-use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
+use tao::event::{ElementState, MouseButton, WindowEvent};
 
 use super::{app, camera, gpu_state, light, model, render_pipeline, util::*};
 
 //////////////////////////////////////////////
 
 pub struct Scene {
-    size: winit::dpi::PhysicalSize<u32>,
+    size: tao::dpi::PhysicalSize<u32>,
     time: instant::Duration,
     mouse_pressed: bool,
     pub camera_controller: camera::CameraController,
@@ -64,33 +64,27 @@ impl app::AppState for Scene {
     fn resize(
         &mut self,
         _gpu_state: &mut gpu_state::GpuState,
-        new_size: winit::dpi::PhysicalSize<u32>,
+        new_size: tao::dpi::PhysicalSize<u32>,
     ) {
         self.size = new_size;
         self.camera_controller.resize(new_size);
     }
 
-    fn size(&self) -> winit::dpi::PhysicalSize<u32> {
+    fn size(&self) -> tao::dpi::PhysicalSize<u32> {
         self.size
     }
 
     fn input(
         &mut self,
-        event: Option<&winit::event::WindowEvent>,
+        event: Option<&tao::event::WindowEvent>,
         mouse_motion: Option<(f64, f64)>,
     ) -> bool {
         if let Some(event) = event {
             match event {
-                WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
-                            virtual_keycode: Some(key),
-                            state,
-                            ..
-                        },
-                    ..
-                } => {
-                    return self.camera_controller.process_keyboard(*key, *state);
+                WindowEvent::KeyboardInput { event, .. } => {
+                    return self
+                        .camera_controller
+                        .process_keyboard(event.physical_key, event.state)
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
                     self.camera_controller.process_scroll(delta);

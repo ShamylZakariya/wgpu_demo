@@ -21,7 +21,7 @@ impl Default for CompositorUniformData {
 type CompositorUniform = UniformWrapper<CompositorUniformData>;
 
 pub struct Compositor {
-    size: winit::dpi::PhysicalSize<u32>,
+    size: tao::dpi::PhysicalSize<u32>,
     time: instant::Duration,
     uniform: CompositorUniform,
     textures_bind_group_layout: wgpu::BindGroupLayout,
@@ -223,7 +223,7 @@ impl AppState for Compositor {
     fn resize(
         &mut self,
         gpu_state: &mut super::gpu_state::GpuState,
-        new_size: winit::dpi::PhysicalSize<u32>,
+        new_size: tao::dpi::PhysicalSize<u32>,
     ) {
         self.size = new_size;
         self.textures_bind_group = Self::create_textures_bind_group(
@@ -233,13 +233,13 @@ impl AppState for Compositor {
         );
     }
 
-    fn size(&self) -> winit::dpi::PhysicalSize<u32> {
+    fn size(&self) -> tao::dpi::PhysicalSize<u32> {
         self.size
     }
 
     fn input(
         &mut self,
-        _event: Option<&winit::event::WindowEvent>,
+        _event: Option<&tao::event::WindowEvent>,
         _mouse_motion: Option<(f64, f64)>,
     ) -> bool {
         false

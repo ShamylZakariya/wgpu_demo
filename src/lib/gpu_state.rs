@@ -3,14 +3,14 @@ pub struct GpuState {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
-    pub size: winit::dpi::PhysicalSize<u32>,
+    pub size: tao::dpi::PhysicalSize<u32>,
     pub pipeline_vendor: super::render_pipeline::RenderPipelineVendor,
     pub depth_attachment: super::texture::Texture,
     pub color_attachment: super::texture::Texture,
 }
 
 impl GpuState {
-    pub async fn new(window: &winit::window::Window) -> Self {
+    pub async fn new(window: &tao::window::Window) -> Self {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::Backends::all());
@@ -67,7 +67,7 @@ impl GpuState {
         }
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub fn resize(&mut self, new_size: tao::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
             self.config.width = new_size.width;
@@ -86,7 +86,7 @@ impl GpuState {
         }
     }
 
-    pub fn size(&self) -> winit::dpi::PhysicalSize<u32> {
+    pub fn size(&self) -> tao::dpi::PhysicalSize<u32> {
         self.size
     }
 }
