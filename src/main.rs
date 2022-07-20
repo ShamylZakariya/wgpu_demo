@@ -58,7 +58,7 @@ fn main() {
             let ambient_light = light::Light::new_ambient(
                 &gpu_state.device,
                 &light::AmbientLightDescriptor {
-                    ambient: (0.3, 0.3, 0.3).into(),
+                    ambient: [0.05; 3].into(),
                 },
             );
 

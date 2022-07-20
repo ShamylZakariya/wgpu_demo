@@ -24,7 +24,7 @@ where
     V: Into<Vec3>,
 {
     let v: Vec3 = color.into();
-    Vec3::new(v.x * v.x, v.y * v.y, v.z * v.z)
+    Vec3::new(v.x, v.y, v.z)
 }
 
 pub fn color4<V>(color: V) -> Vec4
@@ -32,7 +32,7 @@ where
     V: Into<Vec4>,
 {
     let v: Vec4 = color.into();
-    Vec4::new(v.x * v.x, v.y * v.y, v.z * v.z, v.w)
+    Vec4::new(v.x, v.y, v.z, v.w)
 }
 
 /// Uniforms is a generic "holder" for uniform data types.
