@@ -309,7 +309,7 @@ impl Material {
                         vs_main: self.vertex_main(pass),
                         fs_main: self.fragment_main(pass),
                         layout: &layout,
-                        color_format: gpu_state.config.format,
+                        color_format: texture::Texture::COLOR_FORMAT,
                         depth_format: Some(texture::Texture::DEPTH_FORMAT),
                         vertex_layouts: &Model::vertex_layout(),
                         shader,

@@ -50,6 +50,11 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
+- gamma correction
+	- color_attachment should probably be linear
+	- all model shader code should be linear, and return linear
+	- sRGB framebuffer handles delinearization automatically so we can output linear values.
+
 - right now we pass an `output` to render() calls. Would be smarter to pass a tuple of texture views, e.g., (color: TextureView, depth: Option<TextureView>)
 	- when drawing scene, we'd pass (color_attachment.view, Some(depth_attachment.view))
 	- when drawing compositor, we'd pass output.texture.create_view()...
