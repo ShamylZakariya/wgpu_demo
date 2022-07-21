@@ -1,4 +1,4 @@
-use super::{app::AppState, camera::Camera, gpu_state, util::*};
+use super::{camera::Camera, gpu_state, texture, util::*};
 use cgmath::prelude::*;
 
 #[repr(C)]
@@ -31,7 +31,11 @@ pub struct Compositor {
 }
 
 impl Compositor {
-    pub fn new(gpu_state: &mut gpu_state::GpuState) -> Self {
+    pub fn new(
+        gpu_state: &mut gpu_state::GpuState,
+        color_attachment: &texture::Texture,
+        depth_attachment: &texture::Texture,
+    ) -> Self {
         let uniform = CompositorUniform::new(&gpu_state.device);
 
         let textures_bind_group_layout =
@@ -91,6 +95,8 @@ impl Compositor {
 
         let textures_bind_group = Self::create_textures_bind_group(
             gpu_state,
+            color_attachment,
+            depth_attachment,
             &textures_bind_group_layout,
             &depth_attachment_sampler,
         );
@@ -183,6 +189,8 @@ impl Compositor {
 
     fn create_textures_bind_group(
         gpu_state: &gpu_state::GpuState,
+        color_attachment: &texture::Texture,
+        depth_attachment: &texture::Texture,
         texture_layout: &wgpu::BindGroupLayout,
         depth_attachment_sampler: &wgpu::Sampler,
     ) -> wgpu::BindGroup {
@@ -193,21 +201,15 @@ impl Compositor {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(
-                            &gpu_state.color_attachment.view,
-                        ),
+                        resource: wgpu::BindingResource::TextureView(&color_attachment.view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(
-                            &gpu_state.color_attachment.sampler,
-                        ),
+                        resource: wgpu::BindingResource::Sampler(&color_attachment.sampler),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::TextureView(
-                            &gpu_state.depth_attachment.view,
-                        ),
+                        resource: wgpu::BindingResource::TextureView(&depth_attachment.view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
@@ -217,27 +219,29 @@ impl Compositor {
                 label: Some("Compositor Bind Group"),
             })
     }
-}
 
-impl AppState for Compositor {
-    fn resize(
+    pub fn resize(
         &mut self,
         gpu_state: &mut super::gpu_state::GpuState,
+        color_attachment: &texture::Texture,
+        depth_attachment: &texture::Texture,
         new_size: winit::dpi::PhysicalSize<u32>,
     ) {
         self.size = new_size;
         self.textures_bind_group = Self::create_textures_bind_group(
             gpu_state,
+            color_attachment,
+            depth_attachment,
             &self.textures_bind_group_layout,
             &self.depth_attachment_sampler,
         );
     }
 
-    fn size(&self) -> winit::dpi::PhysicalSize<u32> {
+    pub fn size(&self) -> winit::dpi::PhysicalSize<u32> {
         self.size
     }
 
-    fn input(
+    pub fn input(
         &mut self,
         _event: Option<&winit::event::WindowEvent>,
         _mouse_motion: Option<(f64, f64)>,
@@ -245,12 +249,12 @@ impl AppState for Compositor {
         false
     }
 
-    fn update(&mut self, gpu_state: &mut super::gpu_state::GpuState, dt: instant::Duration) {
+    pub fn update(&mut self, gpu_state: &mut super::gpu_state::GpuState, dt: instant::Duration) {
         self.time += dt;
         self.uniform.write(&gpu_state.queue);
     }
 
-    fn render(
+    pub fn render(
         &mut self,
         _gpu_state: &mut gpu_state::GpuState,
         encoder: &mut wgpu::CommandEncoder,

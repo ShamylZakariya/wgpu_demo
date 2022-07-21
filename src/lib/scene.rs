@@ -26,9 +26,6 @@ impl Scene {
         lights: HashMap<usize, light::Light>,
         models: HashMap<usize, model::Model>,
     ) -> Self {
-        let mut camera = camera;
-        camera.resize(gpu_state.size());
-
         // create a pipeline (if needed) for each material
         for model in models.values() {
             model.prepare_pipelines(gpu_state);
@@ -66,11 +63,11 @@ impl Scene {
 impl app::AppState for Scene {
     fn resize(
         &mut self,
-        _gpu_state: &mut gpu_state::GpuState,
+        gpu_state: &mut gpu_state::GpuState,
         new_size: winit::dpi::PhysicalSize<u32>,
     ) {
         self.size = new_size;
-        self.camera.resize(new_size);
+        self.camera.resize(gpu_state, new_size);
     }
 
     fn size(&self) -> winit::dpi::PhysicalSize<u32> {
@@ -154,7 +151,7 @@ impl app::AppState for Scene {
             color_attachments: &[
                 // this is output [[location(0)]]
                 Some(wgpu::RenderPassColorAttachment {
-                    view: &gpu_state.color_attachment.view,
+                    view: &self.camera.color_attachment.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -168,7 +165,7 @@ impl app::AppState for Scene {
                 }),
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &gpu_state.depth_attachment.view,
+                view: &self.camera.depth_attachment.view,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(1.0),
                     store: true,

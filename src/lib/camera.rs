@@ -1,4 +1,4 @@
-use super::util::*;
+use super::{gpu_state, util::*};
 use cgmath::prelude::*;
 use std::ops::Mul;
 
@@ -61,28 +61,45 @@ pub struct Camera {
     // uniform storage
     is_dirty: bool,
     uniform: CameraUniform,
+
+    // attachments
+    pub depth_attachment: super::texture::Texture,
+    pub color_attachment: super::texture::Texture,
 }
 
 impl Camera {
     pub fn new<R: Into<Rad>>(
-        device: &wgpu::Device,
-        width: u32,
-        height: u32,
+        gpu_state: &gpu_state::GpuState,
         fov_y: R,
         z_near: f32,
         z_far: f32,
     ) -> Self {
-        let uniform = CameraUniform::new(device);
+        let uniform = CameraUniform::new(&gpu_state.device);
+
+        // create depth texture
+        let depth_attachment = super::texture::Texture::create_depth_texture(
+            &gpu_state.device,
+            &gpu_state.config,
+            "Depth Attachment",
+        );
+
+        let color_attachment = super::texture::Texture::create_color_texture(
+            &gpu_state.device,
+            &gpu_state.config,
+            "Color Attachment",
+        );
 
         Self {
             position: Point3::new(0.0, 0.0, 0.0),
             look: Mat3::identity(),
-            aspect: width as f32 / height as f32,
+            aspect: gpu_state.size.width as f32 / gpu_state.size.height as f32,
             fov_y: fov_y.into(),
             z_near,
             z_far,
             is_dirty: true,
             uniform,
+            depth_attachment,
+            color_attachment,
         }
     }
 
@@ -99,8 +116,18 @@ impl Camera {
         }
     }
 
-    pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+    pub fn resize(&mut self, gpu_state: &gpu_state::GpuState, size: winit::dpi::PhysicalSize<u32>) {
         self.aspect = size.width as f32 / size.height as f32;
+        self.depth_attachment = super::texture::Texture::create_depth_texture(
+            &gpu_state.device,
+            &gpu_state.config,
+            "Depth Attachment",
+        );
+        self.color_attachment = super::texture::Texture::create_color_texture(
+            &gpu_state.device,
+            &gpu_state.config,
+            "Color Attachment",
+        );
         self.is_dirty = true;
     }
 
