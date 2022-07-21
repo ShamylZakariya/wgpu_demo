@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use cgmath::prelude::*;
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
-use super::{app, camera, gpu_state, light, model, render_pipeline, util::*};
+use super::{app, camera, camera_controller, gpu_state, light, model, render_pipeline, util::*};
 
 //////////////////////////////////////////////
 
@@ -11,8 +11,10 @@ pub struct Scene {
     size: winit::dpi::PhysicalSize<u32>,
     time: instant::Duration,
     mouse_pressed: bool,
-    pub camera_controller: camera::CameraController,
+
+    camera_controller: camera_controller::CameraController,
     ambient_light: light::Light,
+    pub camera: camera::Camera,
     pub lights: HashMap<usize, light::Light>,
     pub models: HashMap<usize, model::Model>,
 }
@@ -24,8 +26,8 @@ impl Scene {
         lights: HashMap<usize, light::Light>,
         models: HashMap<usize, model::Model>,
     ) -> Self {
-        let mut camera_controller = camera::CameraController::new(camera, 4.0, 0.4);
-        camera_controller.resize(gpu_state.size());
+        let mut camera = camera;
+        camera.resize(gpu_state.size());
 
         // create a pipeline (if needed) for each material
         for model in models.values() {
@@ -48,8 +50,9 @@ impl Scene {
             size: gpu_state.size(),
             time: instant::Duration::default(),
             mouse_pressed: false,
-            camera_controller,
+            camera_controller: camera_controller::CameraController::new(4.0, 0.4),
             ambient_light,
+            camera,
             lights,
             models,
         }
@@ -67,7 +70,7 @@ impl app::AppState for Scene {
         new_size: winit::dpi::PhysicalSize<u32>,
     ) {
         self.size = new_size;
-        self.camera_controller.resize(new_size);
+        self.camera.resize(new_size);
     }
 
     fn size(&self) -> winit::dpi::PhysicalSize<u32> {
@@ -120,7 +123,8 @@ impl app::AppState for Scene {
     }
 
     fn update(&mut self, gpu_state: &mut gpu_state::GpuState, dt: instant::Duration) {
-        self.camera_controller.update(&gpu_state.queue, dt);
+        self.camera_controller.update(&mut self.camera, dt);
+        self.camera.update(&gpu_state.queue);
 
         self.ambient_light.set_ambient(
             self.lights
@@ -179,7 +183,7 @@ impl app::AppState for Scene {
                 &mut render_pass,
                 &gpu_state.pipeline_vendor,
                 model,
-                &self.camera_controller,
+                &self.camera,
                 &self.ambient_light,
                 &render_pipeline::Pass::Ambient,
             );
@@ -196,7 +200,7 @@ impl app::AppState for Scene {
                     &mut render_pass,
                     &gpu_state.pipeline_vendor,
                     model,
-                    &self.camera_controller,
+                    &self.camera,
                     light,
                     &render_pipeline::Pass::Lit,
                 );

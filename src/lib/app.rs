@@ -66,7 +66,7 @@ where
             update(&mut scene);
             scene.update( &mut gpu_state, dt);
 
-            compositor.read_camera_properties(scene.camera_controller.camera());
+            compositor.read_camera_properties(&scene.camera);
             compositor.update(&mut gpu_state, dt);
 
             match gpu_state.surface.get_current_texture() {

@@ -517,7 +517,7 @@ pub fn draw_model<'a, 'b>(
     render_pass: &'b mut wgpu::RenderPass<'a>,
     pipeline_vendor: &'a RenderPipelineVendor,
     model: &'a Model,
-    camera: &'a camera::CameraController,
+    camera: &'a camera::Camera,
     light: &'a light::Light,
     pass: &render_pipeline::Pass,
 ) where
@@ -533,7 +533,7 @@ pub fn draw_model<'a, 'b>(
             render_pass.set_vertex_buffer(1, model.instance_buffer.slice(..));
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.set_bind_group(0, &material.bind_group, &[]);
-            render_pass.set_bind_group(1, camera.camera().bind_group(), &[]);
+            render_pass.set_bind_group(1, camera.bind_group(), &[]);
             render_pass.set_bind_group(2, light.bind_group(), &[]);
             render_pass.draw_indexed(0..mesh.num_elements, 0, instances.clone());
         } else {

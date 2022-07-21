@@ -50,19 +50,9 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
-- gamma correction
-	- color_attachment should probably be linear
-	- all model shader code should be linear, and return linear
-	- sRGB framebuffer handles delinearization automatically so we can output linear values.
-
 - right now we pass an `output` to render() calls. Would be smarter to pass a tuple of texture views, e.g., (color: TextureView, depth: Option<TextureView>)
 	- when drawing scene, we'd pass (color_attachment.view, Some(depth_attachment.view))
 	- when drawing compositor, we'd pass output.texture.create_view()...
-
-- we probably want an array of cameras, and to draw them in a loop, but this can wait
-	- would be nice to have a "main" camera
-
-- investigate migration to `tao` from winit.
 
 THEN we can use "camera" with depth textures to render shadows
 
@@ -78,3 +68,15 @@ Things and stuff and people and places....
 ## Remember
 
 uniforms require 16-byte (4 float field spacing)
+
+- investigate migration to `tao` from winit.
+	- this is on branch `replace-winit-with-tao`. it almost works, but has awful flicker.
+
+## Ideas
+
+We probably want an array of cameras, and to draw them in a loop, but this can wait
+	- would be nice to have a "main" camera
+
+Instead of a global ambient term, apparently having a point light centered on the camera can produce lovely results
+	- doesn't need shadows
+	- ref: https://www.vfxwizard.com/tutorials/gamma-correction-for-linear-workflow.html
