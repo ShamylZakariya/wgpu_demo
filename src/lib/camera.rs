@@ -47,6 +47,13 @@ type CameraUniform = UniformWrapper<CameraUniformData>;
 
 ///////////////////////////////////////////////
 
+pub struct RenderBuffers {
+    pub color: Option<super::texture::Texture>,
+    pub depth: Option<super::texture::Texture>,
+}
+
+///////////////////////////////////////////////
+
 pub struct Camera {
     // world view
     position: Point3,
@@ -63,8 +70,7 @@ pub struct Camera {
     uniform: CameraUniform,
 
     // attachments
-    pub depth_attachment: super::texture::Texture,
-    pub color_attachment: super::texture::Texture,
+    pub render_buffers: RenderBuffers,
 }
 
 impl Camera {
@@ -98,8 +104,10 @@ impl Camera {
             z_far,
             is_dirty: true,
             uniform,
-            depth_attachment,
-            color_attachment,
+            render_buffers: RenderBuffers {
+                color: Some(color_attachment),
+                depth: Some(depth_attachment),
+            },
         }
     }
 
@@ -118,16 +126,26 @@ impl Camera {
 
     pub fn resize(&mut self, gpu_state: &gpu_state::GpuState, size: winit::dpi::PhysicalSize<u32>) {
         self.aspect = size.width as f32 / size.height as f32;
-        self.depth_attachment = super::texture::Texture::create_depth_texture(
-            &gpu_state.device,
-            &gpu_state.config,
-            "Depth Attachment",
-        );
-        self.color_attachment = super::texture::Texture::create_color_texture(
-            &gpu_state.device,
-            &gpu_state.config,
-            "Color Attachment",
-        );
+
+        if self.render_buffers.depth.is_some() {
+            self.render_buffers
+                .depth
+                .replace(super::texture::Texture::create_depth_texture(
+                    &gpu_state.device,
+                    &gpu_state.config,
+                    "Depth Attachment",
+                ));
+        }
+
+        if self.render_buffers.color.is_some() {
+            self.render_buffers
+                .color
+                .replace(super::texture::Texture::create_color_texture(
+                    &gpu_state.device,
+                    &gpu_state.config,
+                    "Color Attachment",
+                ));
+        }
         self.is_dirty = true;
     }
 

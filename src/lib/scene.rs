@@ -146,32 +146,43 @@ impl app::AppState for Scene {
         encoder: &mut wgpu::CommandEncoder,
         _output: &wgpu::SurfaceTexture,
     ) {
+        let color_attachment = self
+            .camera
+            .render_buffers
+            .color
+            .as_ref()
+            .map(|color_attachment| wgpu::RenderPassColorAttachment {
+                view: &color_attachment.view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        g: 0.1,
+                        r: 0.1,
+                        b: 0.1,
+                        a: 1.0,
+                    }),
+                    store: true,
+                },
+            });
+
+        let depth_stencil_attachment =
+            self.camera
+                .render_buffers
+                .depth
+                .as_ref()
+                .map(|depth_attachment| wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_attachment.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true,
+                    }),
+                    stencil_ops: None,
+                });
+
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Ambient Render Pass"),
-            color_attachments: &[
-                // this is output [[location(0)]]
-                Some(wgpu::RenderPassColorAttachment {
-                    view: &self.camera.color_attachment.view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            g: 0.1,
-                            r: 0.1,
-                            b: 0.1,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                }),
-            ],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &self.camera.depth_attachment.view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: true,
-                }),
-                stencil_ops: None,
-            }),
+            color_attachments: &[color_attachment],
+            depth_stencil_attachment,
         });
 
         // Render ambient pass

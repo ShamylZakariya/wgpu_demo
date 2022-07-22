@@ -52,6 +52,8 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 - right now we pass an `output` to render() calls. Would be smarter to pass a tuple of texture views, e.g., (color: TextureView, depth: Option<TextureView>)
 	- when drawing scene, we'd pass (color_attachment.view, Some(depth_attachment.view))
+	- make a struct for Camera to use which is Some(color), Some(depth),
+	- pass that to render()
 	- when drawing compositor, we'd pass output.texture.create_view()...
 
 THEN we can use "camera" with depth textures to render shadows

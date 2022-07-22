@@ -45,11 +45,7 @@ where
 
     let mut gpu_state = gpu_state::GpuState::new(&window).await;
     let mut scene = factory(&window, &mut gpu_state);
-    let mut compositor = compositor::Compositor::new(
-        &mut gpu_state,
-        &scene.camera.color_attachment,
-        &scene.camera.depth_attachment,
-    );
+    let mut compositor = compositor::Compositor::new(&mut gpu_state, &scene.camera.render_buffers);
 
     // start even loop
     let mut last_render_time = instant::Instant::now();
@@ -94,7 +90,7 @@ where
                     let size = gpu_state.size();
                     gpu_state.resize(size);
                     scene.resize(&mut gpu_state, size);
-                    compositor.resize(&mut gpu_state, &scene.camera.color_attachment, &scene.camera.depth_attachment, size);
+                    compositor.resize(&mut gpu_state, &scene.camera.render_buffers, size);
                 }
                 // The system is out of memory, we should probably quit
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
@@ -125,12 +121,12 @@ where
                     WindowEvent::Resized(physical_size) => {
                         gpu_state.resize(*physical_size);
                         scene.resize(&mut gpu_state, *physical_size);
-                        compositor.resize(&mut gpu_state, &scene.camera.color_attachment, &scene.camera.depth_attachment,*physical_size);
+                        compositor.resize(&mut gpu_state, &scene.camera.render_buffers, *physical_size);
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                         gpu_state.resize(**new_inner_size);
                         scene.resize(&mut gpu_state, **new_inner_size);
-                        compositor.resize(&mut gpu_state, &scene.camera.color_attachment, &scene.camera.depth_attachment, **new_inner_size);
+                        compositor.resize(&mut gpu_state, &scene.camera.render_buffers, **new_inner_size);
                     }
                     _ => {}
                 }

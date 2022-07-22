@@ -1,4 +1,4 @@
-use super::{camera::Camera, gpu_state, texture, util::*};
+use super::{camera::Camera, gpu_state, util::*};
 use cgmath::prelude::*;
 
 #[repr(C)]
@@ -33,8 +33,7 @@ pub struct Compositor {
 impl Compositor {
     pub fn new(
         gpu_state: &mut gpu_state::GpuState,
-        color_attachment: &texture::Texture,
-        depth_attachment: &texture::Texture,
+        render_buffers: &crate::camera::RenderBuffers,
     ) -> Self {
         let uniform = CompositorUniform::new(&gpu_state.device);
 
@@ -95,8 +94,7 @@ impl Compositor {
 
         let textures_bind_group = Self::create_textures_bind_group(
             gpu_state,
-            color_attachment,
-            depth_attachment,
+            render_buffers,
             &textures_bind_group_layout,
             &depth_attachment_sampler,
         );
@@ -189,33 +187,40 @@ impl Compositor {
 
     fn create_textures_bind_group(
         gpu_state: &gpu_state::GpuState,
-        color_attachment: &texture::Texture,
-        depth_attachment: &texture::Texture,
+        render_buffers: &crate::camera::RenderBuffers,
         texture_layout: &wgpu::BindGroupLayout,
         depth_attachment_sampler: &wgpu::Sampler,
     ) -> wgpu::BindGroup {
+        let mut bind_group_entries = vec![];
+
+        if let Some(color_attachment) = &render_buffers.color {
+            bind_group_entries.push(wgpu::BindGroupEntry {
+                binding: bind_group_entries.len() as u32,
+                resource: wgpu::BindingResource::TextureView(&color_attachment.view),
+            });
+            bind_group_entries.push(wgpu::BindGroupEntry {
+                binding: bind_group_entries.len() as u32,
+                resource: wgpu::BindingResource::Sampler(&color_attachment.sampler),
+            });
+        }
+
+        if let Some(depth_attachment) = &render_buffers.depth {
+            bind_group_entries.push(wgpu::BindGroupEntry {
+                binding: bind_group_entries.len() as u32,
+                resource: wgpu::BindingResource::TextureView(&depth_attachment.view),
+            });
+
+            bind_group_entries.push(wgpu::BindGroupEntry {
+                binding: bind_group_entries.len() as u32,
+                resource: wgpu::BindingResource::Sampler(depth_attachment_sampler),
+            })
+        }
+
         gpu_state
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: texture_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&color_attachment.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&color_attachment.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::TextureView(&depth_attachment.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::Sampler(depth_attachment_sampler),
-                    },
-                ],
+                entries: &bind_group_entries,
                 label: Some("Compositor Bind Group"),
             })
     }
@@ -223,15 +228,13 @@ impl Compositor {
     pub fn resize(
         &mut self,
         gpu_state: &mut super::gpu_state::GpuState,
-        color_attachment: &texture::Texture,
-        depth_attachment: &texture::Texture,
+        render_buffers: &crate::camera::RenderBuffers,
         new_size: winit::dpi::PhysicalSize<u32>,
     ) {
         self.size = new_size;
         self.textures_bind_group = Self::create_textures_bind_group(
             gpu_state,
-            color_attachment,
-            depth_attachment,
+            render_buffers,
             &self.textures_bind_group_layout,
             &self.depth_attachment_sampler,
         );

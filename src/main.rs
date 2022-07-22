@@ -105,7 +105,7 @@ fn main() {
                 (ID_LIGHT_SPOT, spot_light),
             ]);
 
-            let mut camera = camera::Camera::new(&gpu_state, deg(45.0), 0.5, 500.0);
+            let mut camera = camera::Camera::new(gpu_state, deg(45.0), 0.5, 500.0);
             camera.look_at((60.0, 4.0, 60.0), (62.5, 0.0, 62.5), (0.0, 1.0, 0.0));
 
             scene::Scene::new(gpu_state, camera, lights, models)
