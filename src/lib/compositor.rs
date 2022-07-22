@@ -258,7 +258,7 @@ impl Compositor {
     }
 
     pub fn render(
-        &mut self,
+        &self,
         _gpu_state: &mut gpu_state::GpuState,
         encoder: &mut wgpu::CommandEncoder,
         output: &wgpu::SurfaceTexture,

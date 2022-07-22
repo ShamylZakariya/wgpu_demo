@@ -1,5 +1,4 @@
 use winit::{
-    dpi::PhysicalSize,
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
@@ -9,27 +8,6 @@ use crate::lib::gpu_state;
 
 use super::scene::Scene;
 use super::{compositor, gpu_state::GpuState};
-
-pub trait AppState {
-    fn resize(
-        &mut self,
-        gpu_state: &mut gpu_state::GpuState,
-        new_size: winit::dpi::PhysicalSize<u32>,
-    );
-    fn size(&self) -> PhysicalSize<u32>;
-    fn input(
-        &mut self,
-        event: Option<&winit::event::WindowEvent>,
-        mouse_motion: Option<(f64, f64)>,
-    ) -> bool;
-    fn update(&mut self, gpu_state: &mut gpu_state::GpuState, dt: instant::Duration);
-    fn render(
-        &mut self,
-        gpu_state: &mut gpu_state::GpuState,
-        encoder: &mut wgpu::CommandEncoder,
-        output: &wgpu::SurfaceTexture,
-    );
-}
 
 pub async fn run<F, U>(factory: F, update: U)
 where
@@ -79,7 +57,7 @@ where
                                     label: Some("Render Encoder"),
                                 });
 
-                    scene.render(&mut gpu_state, &mut encoder, &output);
+                    scene.render(&mut gpu_state, &mut encoder);
                     compositor.render(&mut gpu_state, &mut encoder, &output);
 
                     gpu_state.queue.submit(std::iter::once(encoder.finish()));

@@ -3,7 +3,11 @@ use std::collections::HashMap;
 use cgmath::prelude::*;
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
-use super::{app, camera, camera_controller, gpu_state, light, model, render_pipeline, util::*};
+use super::{
+    camera::{self, RenderBuffers},
+    camera_controller, gpu_state, light, model, render_pipeline,
+    util::*,
+};
 
 //////////////////////////////////////////////
 
@@ -58,10 +62,8 @@ impl Scene {
     pub fn time(&self) -> instant::Duration {
         self.time
     }
-}
 
-impl app::AppState for Scene {
-    fn resize(
+    pub fn resize(
         &mut self,
         gpu_state: &mut gpu_state::GpuState,
         new_size: winit::dpi::PhysicalSize<u32>,
@@ -70,11 +72,11 @@ impl app::AppState for Scene {
         self.camera.resize(gpu_state, new_size);
     }
 
-    fn size(&self) -> winit::dpi::PhysicalSize<u32> {
+    pub fn size(&self) -> winit::dpi::PhysicalSize<u32> {
         self.size
     }
 
-    fn input(
+    pub fn input(
         &mut self,
         event: Option<&winit::event::WindowEvent>,
         mouse_motion: Option<(f64, f64)>,
@@ -119,7 +121,7 @@ impl app::AppState for Scene {
         false
     }
 
-    fn update(&mut self, gpu_state: &mut gpu_state::GpuState, dt: instant::Duration) {
+    pub fn update(&mut self, gpu_state: &mut gpu_state::GpuState, dt: instant::Duration) {
         self.camera_controller.update(&mut self.camera, dt);
         self.camera.update(&gpu_state.queue);
 
@@ -140,12 +142,7 @@ impl app::AppState for Scene {
         self.time += dt;
     }
 
-    fn render(
-        &mut self,
-        gpu_state: &mut gpu_state::GpuState,
-        encoder: &mut wgpu::CommandEncoder,
-        _output: &wgpu::SurfaceTexture,
-    ) {
+    pub fn render(&self, gpu_state: &mut gpu_state::GpuState, encoder: &mut wgpu::CommandEncoder) {
         let color_attachment = self
             .camera
             .render_buffers
