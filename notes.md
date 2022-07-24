@@ -50,6 +50,8 @@ Make a post processing "stack" which can ping pong between two intermediate text
 
 ## Presently
 
+- do I want to move camera out of scene?
+
 - Cube Map skydome / ambient term
 	- see wgpu skybox example
 

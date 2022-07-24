@@ -4,7 +4,7 @@ use cgmath::prelude::*;
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
 use super::{
-    camera::{self, RenderBuffers},
+    camera::{self},
     camera_controller, gpu_state, light, model, render_pipeline,
     util::*,
 };
