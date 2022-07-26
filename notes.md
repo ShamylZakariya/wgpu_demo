@@ -39,31 +39,39 @@ Introduce mipmaps
 Use multipass rendering to support N lights.
 	- Should be possible with just extra pipelines in a single render pass since RenderPipelineDescriptor supports blend funcs
 
-- Milestone Four
+- Milestone Four : DONE
 Make the scene render to texture and use a simple blitter pipeline to then display that texture
 
-- Milestone Five
-Make a post process shader proof of concept
+- Milestone Five:
+	- Environment map and sky
 
-- Milestone Six
-Make a post processing "stack" which can ping pong between two intermediate textures
+- Milestone Six:
+	- Shadows
+	https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping
 
 ## Presently
 
-- do I want to move camera out of scene?
+Cube maps
 
-- Cube Map skydome / ambient term
-	- see wgpu skybox example
+	TODO:
+	- DONE: create a method on texture to load
+	- DONE: pass to scene, and make it an env_map field
+	- DONE: render in compositor shader, using depth testing?
+	- render in model shader as ambient term, and perhaps also as shiny lookup?
 
-- THEN
-	- shadows!?
-	https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping
+Material
+	Material is at present pretty bare bones and needs fleshing out
+	- shininess but as a power term, e.g., 1 -> 64 or whatever
+	- roughness which I guess maps to skybox mip?
+	- emission
+
+
+
+
+## Remember
 
 Do I want a GUI?
 	- https://github.com/emilk/egui#example
-Things and stuff and people and places....
-
-## Remember
 
 uniforms require 16-byte (4 float field spacing)
 

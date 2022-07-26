@@ -1,5 +1,6 @@
 use anyhow::*;
 use image::GenericImageView;
+use wgpu::util::DeviceExt;
 
 // CLosest power of two to `v` without exceeding `v`
 // E.g., 511 -> 256; 512 -> 512; 513 -> 512
@@ -12,6 +13,7 @@ pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
+    pub view_dimension: wgpu::TextureViewDimension,
 }
 
 impl Texture {
@@ -141,6 +143,59 @@ impl Texture {
             texture,
             view,
             sampler,
+            view_dimension: wgpu::TextureViewDimension::D2,
+        })
+    }
+
+    pub fn cubemap_from_dds(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bytes: &[u8],
+        label: &str,
+    ) -> Result<Self> {
+        let image = ddsfile::Dds::read(&mut std::io::Cursor::new(&bytes))?;
+        let size = wgpu::Extent3d {
+            width: image.get_width(),
+            height: image.get_height(),
+            depth_or_array_layers: 6,
+        };
+
+        let texture = device.create_texture_with_data(
+            queue,
+            &wgpu::TextureDescriptor {
+                size,
+                mip_level_count: image.get_num_mipmap_levels(),
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                label: Some(label),
+            },
+            &image.data,
+        );
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some(label),
+            dimension: Some(wgpu::TextureViewDimension::Cube),
+            ..wgpu::TextureViewDescriptor::default()
+        });
+
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some(label),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        Ok(Self {
+            texture,
+            view,
+            sampler,
+            view_dimension: wgpu::TextureViewDimension::Cube,
         })
     }
 
@@ -183,6 +238,7 @@ impl Texture {
             texture,
             view,
             sampler,
+            view_dimension: wgpu::TextureViewDimension::D2,
         }
     }
 
@@ -225,6 +281,7 @@ impl Texture {
             texture,
             view,
             sampler,
+            view_dimension: wgpu::TextureViewDimension::D2,
         }
     }
 }

@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use cgmath::prelude::*;
-use lib::{camera, gpu_state::GpuState, light, model, resources, scene, util::*};
+use lib::{camera, gpu_state::GpuState, light, model, resources, scene, texture, util::*};
 
 #[allow(dead_code)]
 mod lib;
@@ -11,6 +11,7 @@ fn load_model<P>(
     mtl_file: Option<&str>,
     positions: &[P],
     gpu_state: &GpuState,
+    environment_map: Rc<texture::Texture>,
 ) -> model::Model
 where
     P: Into<Point3> + Copy,
@@ -26,6 +27,7 @@ where
         &gpu_state.device,
         &gpu_state.queue,
         &instances,
+        environment_map,
         false,
     )
     .unwrap()
@@ -43,6 +45,15 @@ fn main() {
 
     pollster::block_on(lib::app::run(
         |_window, gpu_state| {
+            let environment_map = Rc::new(
+                resources::load_cubemap_texture_sync(
+                    "env-map.dds",
+                    &gpu_state.device,
+                    &gpu_state.queue,
+                )
+                .unwrap(),
+            );
+
             let mut positions = vec![];
             for x in 0..50 {
                 for z in 0..50 {
@@ -52,7 +63,13 @@ fn main() {
 
             let models = HashMap::from([(
                 ID_MODEL_CUBE_FLOOR,
-                load_model("cube.obj", Some("plain.mtl"), &positions, gpu_state),
+                load_model(
+                    "cube.obj",
+                    Some("untextured.mtl"),
+                    &positions,
+                    gpu_state,
+                    environment_map.clone(),
+                ),
             )]);
 
             let ambient_light = light::Light::new_ambient(
@@ -108,7 +125,7 @@ fn main() {
             let mut camera = camera::Camera::new(gpu_state, deg(45.0), 0.5, 500.0);
             camera.look_at((60.0, 4.0, 60.0), (62.5, 0.0, 62.5), (0.0, 1.0, 0.0));
 
-            scene::Scene::new(gpu_state, camera, lights, models)
+            scene::Scene::new(gpu_state, camera, environment_map, lights, models)
         },
         |scene| {
             let seconds = scene.time().as_secs_f32();

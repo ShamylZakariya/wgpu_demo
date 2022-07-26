@@ -14,9 +14,11 @@ pub const OPENGL_TO_WGPU_MATRIX: Mat4 = Mat4::new(
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct CameraUniformData {
+pub struct CameraUniformData {
     view_position: Vec4,
     view_proj: Mat4,
+    proj_inverse: Mat4,
+    view_inverse: Mat4,
 }
 
 unsafe impl bytemuck::Pod for CameraUniformData {}
@@ -27,6 +29,8 @@ impl Default for CameraUniformData {
         Self {
             view_position: Vec4::zero(),
             view_proj: Mat4::identity(),
+            proj_inverse: Mat4::identity(),
+            view_inverse: Mat4::identity(),
         }
     }
 }
@@ -40,10 +44,12 @@ impl CameraUniformData {
     ) {
         self.view_position = camera_position.to_homogeneous();
         self.view_proj = camera_projection * camera_view;
+        self.proj_inverse = camera_projection.inverse_transform().unwrap();
+        self.view_inverse = camera_view.inverse_transform().unwrap();
     }
 }
 
-type CameraUniform = UniformWrapper<CameraUniformData>;
+pub type CameraUniform = UniformWrapper<CameraUniformData>;
 
 ///////////////////////////////////////////////
 
