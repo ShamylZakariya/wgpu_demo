@@ -1,4 +1,6 @@
-use super::{camera::Camera, gpu_state, util::*};
+use std::rc::Rc;
+
+use super::{camera, gpu_state, texture, util::*};
 use cgmath::prelude::*;
 
 #[repr(C)]
@@ -24,6 +26,7 @@ pub struct Compositor {
     size: winit::dpi::PhysicalSize<u32>,
     time: instant::Duration,
     uniform: CompositorUniform,
+    environment_map: Rc<texture::Texture>,
     textures_bind_group_layout: wgpu::BindGroupLayout,
     textures_bind_group: wgpu::BindGroup,
     depth_attachment_sampler: wgpu::Sampler,
@@ -34,6 +37,7 @@ impl Compositor {
     pub fn new(
         gpu_state: &mut gpu_state::GpuState,
         render_buffers: &crate::camera::RenderBuffers,
+        environment_map: Rc<texture::Texture>,
     ) -> Self {
         let uniform = CompositorUniform::new(&gpu_state.device);
 
@@ -79,6 +83,24 @@ impl Compositor {
                             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                             count: None,
                         },
+                        // Environment Map
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 4,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::Cube,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        // Environment Map Sampler
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 5,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
                     ],
                 });
 
@@ -97,6 +119,7 @@ impl Compositor {
             render_buffers,
             &textures_bind_group_layout,
             &depth_attachment_sampler,
+        &environment_map,
         );
 
         let render_pipeline_layout =
@@ -104,7 +127,11 @@ impl Compositor {
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Layout"),
-                    bind_group_layouts: &[&textures_bind_group_layout, &uniform.bind_group_layout],
+                    bind_group_layouts: &[
+                        &textures_bind_group_layout,
+                        &uniform.bind_group_layout,
+                        &camera::Camera::bind_group_layout(&gpu_state.device),
+                    ],
                     push_constant_ranges: &[],
                 });
 
@@ -164,6 +191,7 @@ impl Compositor {
             size: gpu_state.size(),
             time: instant::Duration::default(),
             uniform,
+            environment_map,
             textures_bind_group_layout,
             textures_bind_group,
             depth_attachment_sampler,
@@ -175,21 +203,12 @@ impl Compositor {
         self.time
     }
 
-    pub fn read_camera_properties(&mut self, camera: &Camera) {
-        let (z_near, z_far) = camera.depth_range();
-        self.uniform.get_mut().camera_z_near_far_width_height = Vec4::new(
-            z_near,
-            z_far,
-            self.size.width as f32,
-            self.size.height as f32,
-        );
-    }
-
     fn create_textures_bind_group(
         gpu_state: &gpu_state::GpuState,
         render_buffers: &crate::camera::RenderBuffers,
         texture_layout: &wgpu::BindGroupLayout,
         depth_attachment_sampler: &wgpu::Sampler,
+        environment_map: &texture::Texture,
     ) -> wgpu::BindGroup {
         let mut bind_group_entries = vec![];
 
@@ -216,6 +235,16 @@ impl Compositor {
             })
         }
 
+        bind_group_entries.push(wgpu::BindGroupEntry {
+            binding: bind_group_entries.len() as u32,
+            resource: wgpu::BindingResource::TextureView(&environment_map.view),
+        });
+
+        bind_group_entries.push(wgpu::BindGroupEntry {
+            binding: bind_group_entries.len() as u32,
+            resource: wgpu::BindingResource::Sampler(&environment_map.sampler),
+        });
+
         gpu_state
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
@@ -237,6 +266,7 @@ impl Compositor {
             render_buffers,
             &self.textures_bind_group_layout,
             &self.depth_attachment_sampler,
+            &self.environment_map,
         );
     }
 
@@ -252,14 +282,29 @@ impl Compositor {
         false
     }
 
-    pub fn update(&mut self, gpu_state: &mut super::gpu_state::GpuState, dt: instant::Duration) {
+    pub fn update(
+        &mut self,
+        gpu_state: &mut super::gpu_state::GpuState,
+        camera: &camera::Camera,
+        dt: instant::Duration,
+    ) {
         self.time += dt;
+
+        let (z_near, z_far) = camera.depth_range();
+        self.uniform.get_mut().camera_z_near_far_width_height = Vec4::new(
+            z_near,
+            z_far,
+            self.size.width as f32,
+            self.size.height as f32,
+        );
+
         self.uniform.write(&gpu_state.queue);
     }
 
     pub fn render(
         &self,
         _gpu_state: &mut gpu_state::GpuState,
+        camera: &camera::Camera,
         encoder: &mut wgpu::CommandEncoder,
         output: &wgpu::SurfaceTexture,
     ) {
@@ -283,6 +328,7 @@ impl Compositor {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.textures_bind_group, &[]);
         render_pass.set_bind_group(1, &self.uniform.bind_group, &[]);
+        render_pass.set_bind_group(2, &camera.bind_group(), &[]);
         render_pass.draw(0..3, 0..1);
     }
 }

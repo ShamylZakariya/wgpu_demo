@@ -23,7 +23,11 @@ where
 
     let mut gpu_state = gpu_state::GpuState::new(&window).await;
     let mut scene = factory(&window, &mut gpu_state);
-    let mut compositor = compositor::Compositor::new(&mut gpu_state, &scene.camera.render_buffers);
+    let mut compositor = compositor::Compositor::new(
+        &mut gpu_state,
+        &scene.camera.render_buffers,
+        scene.environment_map.clone(),
+    );
 
     // start even loop
     let mut last_render_time = instant::Instant::now();
@@ -44,8 +48,7 @@ where
             update(&mut scene);
             scene.update( &mut gpu_state, dt);
 
-            compositor.read_camera_properties(&scene.camera);
-            compositor.update(&mut gpu_state, dt);
+            compositor.update(&mut gpu_state, &scene.camera, dt);
 
             match gpu_state.surface.get_current_texture() {
                 Ok(output) => {
@@ -58,7 +61,7 @@ where
                                 });
 
                     scene.render(&mut gpu_state, &mut encoder);
-                    compositor.render(&mut gpu_state, &mut encoder, &output);
+                    compositor.render(&mut gpu_state, &scene.camera, &mut encoder, &output);
 
                     gpu_state.queue.submit(std::iter::once(encoder.finish()));
                     output.present();

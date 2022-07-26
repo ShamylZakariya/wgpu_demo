@@ -1,5 +1,8 @@
 use cgmath::prelude::*;
-use std::io::{BufReader, Cursor};
+use std::{
+    io::{BufReader, Cursor},
+    rc::Rc,
+};
 use wgpu::util::DeviceExt;
 
 use super::{model, texture, util::*};
@@ -60,12 +63,30 @@ pub async fn load_texture(
     )
 }
 
+pub fn load_cubemap_texture_sync(
+    file_name: &str,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> anyhow::Result<texture::Texture> {
+    pollster::block_on(load_cubemap_texture(file_name, device, queue))
+}
+
+pub async fn load_cubemap_texture(
+    file_name: &str,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> anyhow::Result<texture::Texture> {
+    let data = load_binary(file_name).await?;
+    texture::Texture::cubemap_from_dds(device, queue, &data, file_name)
+}
+
 pub fn load_model_sync(
     file_name: &str,
     material_name: Option<&str>,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     instances: &[model::Instance],
+    environment_map: Rc<texture::Texture>,
     generate_mipmaps: bool,
 ) -> anyhow::Result<model::Model> {
     pollster::block_on(load_model(
@@ -74,6 +95,7 @@ pub fn load_model_sync(
         device,
         queue,
         instances,
+        environment_map,
         generate_mipmaps,
     ))
 }
@@ -84,6 +106,7 @@ pub async fn load_model(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     instances: &[model::Instance],
+    environment_map: Rc<texture::Texture>,
     generate_mipmaps: bool,
 ) -> anyhow::Result<model::Model> {
     let obj_text = load_string(file_name).await?;
@@ -131,6 +154,7 @@ pub async fn load_model(
                 diffuse,
                 specular,
                 shininess: m.shininess,
+                environment_map: Some(environment_map.clone()),
                 diffuse_texture,
                 normal_texture,
                 shininess_texture,

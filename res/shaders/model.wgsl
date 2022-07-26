@@ -12,6 +12,8 @@ struct Material {
 struct CameraUniform {
     view_pos: vec4<f32>,
     view_proj: mat4x4<f32>,
+    proj_inverse: mat4x4<f32>,
+    view_inverse: mat4x4<f32>,
 };
 
 struct Light {
@@ -35,22 +37,28 @@ struct Light {
 var<uniform> material: Material;
 
 @group(0) @binding(1)
-var t_diffuse: texture_2d<f32>;
+var environment_map_texture: texture_cube<f32>;
 
 @group(0) @binding(2)
-var s_diffuse: sampler;
+var environment_map_sampler: sampler;
 
 @group(0) @binding(3)
-var t_normal: texture_2d<f32>;
+var diffuse_texture: texture_2d<f32>;
 
 @group(0) @binding(4)
-var s_normal: sampler;
+var diffuse_sampler: sampler;
 
 @group(0) @binding(5)
-var t_shininess: texture_2d<f32>;
+var normal_texture: texture_2d<f32>;
 
 @group(0) @binding(6)
-var s_shininess: sampler;
+var normal_sampler: sampler;
+
+@group(0) @binding(7)
+var shininess_texture: texture_2d<f32>;
+
+@group(0) @binding(8)
+var shininess_sampler: sampler;
 
 @group(1) @binding(0)
 var<uniform> camera: CameraUniform;
@@ -84,11 +92,14 @@ struct InstanceInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
-    @location(1) tex_coords: vec2<f32>,
-    @location(2) tangent_position: vec3<f32>,
-    @location(3) tangent_view_position: vec3<f32>,
-    @location(4) tangent_light_position: vec3<f32>,
-    @location(5) tangent_light_dir: vec3<f32>,
+    @location(1) world_normal: vec3<f32>,
+    @location(2) world_tangent: vec3<f32>,
+    @location(3) world_bitangent: vec3<f32>,
+    @location(4) tex_coords: vec2<f32>,
+    @location(5) tangent_position: vec3<f32>,
+    @location(6) tangent_view_position: vec3<f32>,
+    @location(7) tangent_light_position: vec3<f32>,
+    @location(8) tangent_light_dir: vec3<f32>,
 };
 
 //
@@ -139,12 +150,21 @@ fn vs_main_ambient(model: VertexInput, instance: InstanceInput) -> VertexOutput 
         instance.model_matrix_3,
     );
 
+    let normal_matrix = mat3x3<f32>(
+        instance.normal_matrix_1,
+        instance.normal_matrix_2,
+        instance.normal_matrix_3,
+    );
+
     var world_position: vec4<f32> = model_matrix * vec4<f32>(model.position, 1.0);
 
     var out: VertexOutput;
     out.clip_position = camera.view_proj * world_position;
     out.world_position = world_position;
     out.tex_coords = model.tex_coords;
+    out.world_normal = normal_matrix * model.normal;
+    out.world_tangent = normal_matrix * model.tangent;
+    out.world_bitangent = normal_matrix * model.bitangent;
     return out;
 }
 
@@ -178,6 +198,7 @@ fn vs_main_lit(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     out.clip_position = camera.view_proj * world_position;
     out.world_position = world_position;
     out.tex_coords = model.tex_coords;
+    out.world_normal = world_normal;
     out.tangent_position = tangent_matrix * world_position.xyz;
     out.tangent_view_position = tangent_matrix * camera.view_pos.xyz;
     out.tangent_light_position = tangent_matrix * light.position;
@@ -191,22 +212,64 @@ fn vs_main_lit(model: VertexInput, instance: InstanceInput) -> VertexOutput {
 //
 
 @fragment
-fn fs_main_ambient_diffuse(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color:vec4<f32> = material.diffuse * textureSample(t_diffuse, s_diffuse, in.tex_coords);
-    let ambient_color = light.ambient * material.ambient.rgb;
+fn fs_main_ambient_untextured(in: VertexOutput) -> @location(0) vec4<f32> {
+    let object_color = material.diffuse;
+    let object_normal = in.world_normal;
+    let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
+    let environment_color = textureSample(environment_map_texture, environment_map_sampler, in.world_normal).rgb;
+    let environment_reflection = material.specular.rgb * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
+    let ambient_color = (environment_color.rgb * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
 
-    let result = ambient_color * object_color.rgb;
-    return vec4<f32>(result, object_color.a);
+    return vec4<f32>(environment_reflection + ambient_color, object_color.a);
 }
 
 @fragment
-fn fs_main_ambient_untextured(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color = material.diffuse;
-    let ambient_color = light.ambient * material.ambient.rgb;
+fn fs_main_ambient_diffuse(in: VertexOutput) -> @location(0) vec4<f32> {
+    let object_color = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
+    let object_normal = in.world_normal;
+    let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
+    let environment_color = textureSample(environment_map_texture, environment_map_sampler, in.world_normal).rgb;
+    let environment_reflection = material.specular.rgb * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
+    let ambient_color = (environment_color.rgb * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
 
-    let result = ambient_color * object_color.rgb;
-    return vec4<f32>(result, object_color.a);
+    return vec4<f32>(environment_reflection + ambient_color, object_color.a);
 }
+
+@fragment
+fn fs_main_ambient_diffuse_normal(in: VertexOutput) -> @location(0) vec4<f32> {
+    let tangent_to_world = mat3x3<f32>(
+        in.world_tangent,
+        in.world_bitangent,
+        in.world_normal
+    );
+
+    let object_color = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
+    let object_normal = tangent_to_world * (textureSample(normal_texture, normal_sampler, in.tex_coords).xyz * 2.0 - 1.0);
+    let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
+    let environment_color = textureSample(environment_map_texture, environment_map_sampler, object_normal);
+    let environment_reflection = material.specular.rgb * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
+    let ambient_color = (environment_color.rgb * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
+    return vec4<f32>(ambient_color, object_color.a);
+}
+
+@fragment
+fn fs_main_ambient_diffuse_normal_shininess(in: VertexOutput) -> @location(0) vec4<f32> {
+    let tangent_to_world = mat3x3<f32>(
+        in.world_tangent,
+        in.world_bitangent,
+        in.world_normal
+    );
+
+    let object_color = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
+    let object_normal = tangent_to_world * (textureSample(normal_texture, normal_sampler, in.tex_coords).xyz * 2.0 - 1.0);
+    let object_shininess = material.specular.rgb * textureSample(shininess_texture, shininess_sampler, in.tex_coords).r;
+    let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
+    let environment_color = textureSample(environment_map_texture, environment_map_sampler, object_normal);
+    let environment_reflection = object_shininess * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
+    let ambient_color = (environment_color.rgb * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
+    return vec4<f32>(ambient_color, object_color.a);
+}
+
 
 //
 //  Fragment Lit
@@ -214,9 +277,9 @@ fn fs_main_ambient_untextured(in: VertexOutput) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_main_lit_diffuse_normal_shininess(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color:vec4<f32> = material.diffuse * textureSample(t_diffuse, s_diffuse, in.tex_coords);
-    let object_normal:vec4<f32> = textureSample(t_normal, s_normal, in.tex_coords);
-    let object_shininess:vec4<f32> = textureSample(t_shininess, s_shininess, in.tex_coords);
+    let object_color:vec4<f32> = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
+    let object_normal:vec4<f32> = textureSample(normal_texture, normal_sampler, in.tex_coords);
+    let object_shininess:vec4<f32> = textureSample(shininess_texture, shininess_sampler, in.tex_coords);
 
     let tangent_normal = object_normal.xyz * 2.0 - 1.0;
     let light_dir = fs_get_light_dir(in);
@@ -236,8 +299,8 @@ fn fs_main_lit_diffuse_normal_shininess(in: VertexOutput) -> @location(0) vec4<f
 
 @fragment
 fn fs_main_lit_diffuse_normal(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color:vec4<f32> = material.diffuse * textureSample(t_diffuse, s_diffuse, in.tex_coords);
-    let object_normal:vec4<f32> = textureSample(t_normal, s_normal, in.tex_coords);
+    let object_color:vec4<f32> = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
+    let object_normal:vec4<f32> = textureSample(normal_texture, normal_sampler, in.tex_coords);
 
     let tangent_normal = object_normal.xyz * 2.0 - 1.0;
     let light_dir = fs_get_light_dir(in);
@@ -257,7 +320,7 @@ fn fs_main_lit_diffuse_normal(in: VertexOutput) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_main_lit_diffuse(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color:vec4<f32> = material.diffuse * textureSample(t_diffuse, s_diffuse, in.tex_coords);
+    let object_color:vec4<f32> = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
 
     let tangent_normal = vec3<f32>(0.0, 0.0, 1.0);
     let light_dir = fs_get_light_dir(in);

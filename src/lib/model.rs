@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use cgmath::prelude::*;
 use wgpu::{util::DeviceExt, vertex_attr_array};
@@ -137,6 +137,7 @@ pub struct MaterialProperties<'a> {
     pub diffuse: Vec4,
     pub specular: Vec4,
     pub shininess: f32,
+    pub environment_map: Option<Rc<texture::Texture>>,
     pub diffuse_texture: Option<texture::Texture>,
     pub normal_texture: Option<texture::Texture>,
     pub shininess_texture: Option<texture::Texture>,
@@ -150,6 +151,7 @@ impl<'a> Default for MaterialProperties<'a> {
             diffuse: Vec4::new(1.0, 1.0, 1.0, 1.0),
             specular: Vec4::new(1.0, 1.0, 1.0, 1.0),
             shininess: 1.0,
+            environment_map: None,
             diffuse_texture: None,
             normal_texture: None,
             shininess_texture: None,
@@ -163,6 +165,7 @@ pub struct Material {
     pub diffuse: Vec4,
     pub specular: Vec4,
     pub shininess: f32,
+    pub environment_map: Option<Rc<texture::Texture>>,
     pub diffuse_texture: Option<texture::Texture>,
     pub normal_texture: Option<texture::Texture>,
     pub shininess_texture: Option<texture::Texture>,
@@ -211,8 +214,19 @@ impl Material {
         });
 
         let mut offset = 1u32;
+
+        if let Some(texture) = &properties.environment_map {
+            base_id = format!("(environment-map-{})", offset);
+            offset += Self::create_bind_groups_for(
+                texture,
+                offset,
+                &mut bind_group_layout_entries,
+                &mut bind_group_entries,
+            );
+        }
+
         if let Some(texture) = &properties.diffuse_texture {
-            base_id = format!("(diffuse-{})", offset);
+            base_id = format!("{}(diffuse-{})", base_id, offset);
             offset += Self::create_bind_groups_for(
                 texture,
                 offset,
@@ -262,6 +276,7 @@ impl Material {
             diffuse: properties.diffuse,
             specular: properties.specular,
             shininess: properties.shininess,
+            environment_map: properties.environment_map,
             diffuse_texture: properties.diffuse_texture,
             normal_texture: properties.normal_texture,
             shininess_texture: properties.shininess_texture,
@@ -355,7 +370,9 @@ impl Material {
             &self.shininess_texture,
         ) {
             (None, None, None) => "fs_main_ambient_untextured",
-            (Some(_), _, _) => "fs_main_ambient_diffuse",
+            (Some(_), None, None) => "fs_main_ambient_diffuse",
+            (Some(_), Some(_), None) => "fs_main_ambient_diffuse_normal",
+            (Some(_), Some(_), Some(_)) => "fs_main_ambient_diffuse_normal_shininess",
             _ => unimplemented!(
                 "Material::ambient_fragment_main doesn't support texture conbination specified"
             ),
@@ -399,7 +416,7 @@ impl Material {
             visibility: wgpu::ShaderStages::FRAGMENT,
             ty: wgpu::BindingType::Texture {
                 multisampled: false,
-                view_dimension: wgpu::TextureViewDimension::D2,
+                view_dimension: texture.view_dimension,
                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
             },
             count: None,

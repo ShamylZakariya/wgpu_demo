@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use cgmath::prelude::*;
 use winit::event::{ElementState, KeyboardInput, MouseButton, WindowEvent};
 
 use super::{
     camera::{self},
-    camera_controller, gpu_state, light, model, render_pipeline,
+    camera_controller, gpu_state, light, model, render_pipeline, texture,
     util::*,
 };
 
@@ -18,6 +18,7 @@ pub struct Scene {
 
     camera_controller: camera_controller::CameraController,
     ambient_light: light::Light,
+    pub environment_map: Rc<texture::Texture>,
     pub camera: camera::Camera,
     pub lights: HashMap<usize, light::Light>,
     pub models: HashMap<usize, model::Model>,
@@ -27,6 +28,7 @@ impl Scene {
     pub fn new(
         gpu_state: &mut gpu_state::GpuState,
         camera: camera::Camera,
+        environment_map: Rc<texture::Texture>,
         lights: HashMap<usize, light::Light>,
         models: HashMap<usize, model::Model>,
     ) -> Self {
@@ -53,6 +55,7 @@ impl Scene {
             mouse_pressed: false,
             camera_controller: camera_controller::CameraController::new(4.0, 0.4),
             ambient_light,
+            environment_map,
             camera,
             lights,
             models,
