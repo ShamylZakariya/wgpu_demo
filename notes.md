@@ -42,7 +42,7 @@ Use multipass rendering to support N lights.
 - Milestone Four : DONE
 Make the scene render to texture and use a simple blitter pipeline to then display that texture
 
-- Milestone Five:
+- Milestone Five: DONE
 	- Environment map and sky
 
 - Milestone Six:
@@ -51,19 +51,19 @@ Make the scene render to texture and use a simple blitter pipeline to then displ
 
 ## Presently
 
-Cube maps
-
-	TODO:
-	- DONE: create a method on texture to load
-	- DONE: pass to scene, and make it an env_map field
-	- DONE: render in compositor shader, using depth testing?
-	- render in model shader as ambient term, and perhaps also as shiny lookup?
-
 Material
 	Material is at present pretty bare bones and needs fleshing out
 	- shininess but as a power term, e.g., 1 -> 64 or whatever
 	- roughness which I guess maps to skybox mip?
 	- emission
+
+Obj Model MTL Spec notes
+- Ka, map_Ka: ambient
+- Kd, map_Kd: diffuse
+- Ks, map_Ks: specular reflectivity
+- d, map_d: dissolve, or opacity
+- Ns, map_Ns: specular exponent, or "sharpness"
+- map_Bump: normal map 
 
 
 
