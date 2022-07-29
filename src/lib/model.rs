@@ -111,7 +111,7 @@ pub struct MaterialUniform {
     ambient: Vec4,
     diffuse: Vec4,
     specular: Vec4,
-    shininess: f32,
+    glossiness: f32,
     _padding: [f32; 3],
 }
 
@@ -125,7 +125,7 @@ impl Default for MaterialUniform {
             ambient: one,
             diffuse: one,
             specular: one,
-            shininess: 1.0,
+            glossiness: 1.0,
             _padding: Default::default(),
         }
     }
@@ -136,11 +136,11 @@ pub struct MaterialProperties<'a> {
     pub ambient: Vec4,
     pub diffuse: Vec4,
     pub specular: Vec4,
-    pub shininess: f32,
+    pub glossiness: f32,
     pub environment_map: Option<Rc<texture::Texture>>,
     pub diffuse_texture: Option<texture::Texture>,
     pub normal_texture: Option<texture::Texture>,
-    pub shininess_texture: Option<texture::Texture>,
+    pub glossiness_texture: Option<texture::Texture>,
 }
 
 impl<'a> Default for MaterialProperties<'a> {
@@ -150,11 +150,11 @@ impl<'a> Default for MaterialProperties<'a> {
             ambient: Vec4::new(1.0, 1.0, 1.0, 1.0),
             diffuse: Vec4::new(1.0, 1.0, 1.0, 1.0),
             specular: Vec4::new(1.0, 1.0, 1.0, 1.0),
-            shininess: 1.0,
+            glossiness: 1.0,
             environment_map: None,
             diffuse_texture: None,
             normal_texture: None,
-            shininess_texture: None,
+            glossiness_texture: None,
         }
     }
 }
@@ -164,11 +164,11 @@ pub struct Material {
     pub ambient: Vec4,
     pub diffuse: Vec4,
     pub specular: Vec4,
-    pub shininess: f32,
+    pub glossiness: f32,
     pub environment_map: Option<Rc<texture::Texture>>,
     pub diffuse_texture: Option<texture::Texture>,
     pub normal_texture: Option<texture::Texture>,
-    pub shininess_texture: Option<texture::Texture>,
+    pub glossiness_texture: Option<texture::Texture>,
     pub material_uniform: MaterialUniform, // represents non-texture uniforms
     pub material_uniform_buffer: wgpu::Buffer, // represents non-texture uniforms
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -187,7 +187,7 @@ impl Material {
             ambient: color4(properties.ambient),
             diffuse: color4(properties.diffuse),
             specular: color4(properties.specular),
-            shininess: properties.shininess,
+            glossiness: properties.glossiness,
             ..Default::default()
         };
 
@@ -245,8 +245,8 @@ impl Material {
             );
         }
 
-        if let Some(texture) = &properties.shininess_texture {
-            base_id = format!("{}(shininess-{})", base_id, offset);
+        if let Some(texture) = &properties.glossiness_texture {
+            base_id = format!("{}(glossiness-{})", base_id, offset);
             Self::create_bind_groups_for(
                 texture,
                 offset,
@@ -275,11 +275,11 @@ impl Material {
             ambient: properties.ambient,
             diffuse: properties.diffuse,
             specular: properties.specular,
-            shininess: properties.shininess,
+            glossiness: properties.glossiness,
             environment_map: properties.environment_map,
             diffuse_texture: properties.diffuse_texture,
             normal_texture: properties.normal_texture,
-            shininess_texture: properties.shininess_texture,
+            glossiness_texture: properties.glossiness_texture,
             material_uniform,
             material_uniform_buffer,
             bind_group,
@@ -367,12 +367,12 @@ impl Material {
         match (
             &self.diffuse_texture,
             &self.normal_texture,
-            &self.shininess_texture,
+            &self.glossiness_texture,
         ) {
             (None, None, None) => "fs_main_ambient_untextured",
             (Some(_), None, None) => "fs_main_ambient_diffuse",
             (Some(_), Some(_), None) => "fs_main_ambient_diffuse_normal",
-            (Some(_), Some(_), Some(_)) => "fs_main_ambient_diffuse_normal_shininess",
+            (Some(_), Some(_), Some(_)) => "fs_main_ambient_diffuse_normal_glossiness",
             _ => unimplemented!(
                 "Material::ambient_fragment_main doesn't support texture conbination specified"
             ),
@@ -387,12 +387,12 @@ impl Material {
         match (
             &self.diffuse_texture,
             &self.normal_texture,
-            &self.shininess_texture,
+            &self.glossiness_texture,
         ) {
             (None, None, None) => "fs_main_lit_untextured",
             (Some(_), None, None) => "fs_main_lit_diffuse",
             (Some(_), Some(_), None) => "fs_main_lit_diffuse_normal",
-            (Some(_), Some(_), Some(_)) => "fs_main_lit_diffuse_normal_shininess",
+            (Some(_), Some(_), Some(_)) => "fs_main_lit_diffuse_normal_glossiness",
             _ => {
                 unimplemented!(
                     "Material::lit_fragment_main doesn't support texture combination specified"

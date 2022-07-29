@@ -33,14 +33,17 @@ where
     .unwrap()
 }
 
-const ID_LIGHT_AMBIENT: usize = 0;
-const ID_LIGHT_PRIMARY: usize = 1;
-const ID_LIGHT_POINT: usize = 2;
-const ID_LIGHT_SPOT: usize = 3;
+#[allow(dead_code, unused_variables)]
+fn cube_scene() {
+    // Light definitions
+    const ID_LIGHT_AMBIENT: usize = 0;
+    const ID_LIGHT_PRIMARY: usize = 1;
+    const ID_LIGHT_POINT: usize = 2;
+    const ID_LIGHT_SPOT: usize = 3;
 
-const ID_MODEL_CUBE_FLOOR: usize = 0;
+    // Model definitions
+    const ID_MODEL_CUBE_FLOOR: usize = 0;
 
-fn main() {
     env_logger::init();
 
     pollster::block_on(lib::app::run(
@@ -118,8 +121,8 @@ fn main() {
             let lights = HashMap::from([
                 (ID_LIGHT_AMBIENT, ambient_light),
                 (ID_LIGHT_PRIMARY, directional_light),
-                (ID_LIGHT_POINT, point_light),
-                (ID_LIGHT_SPOT, spot_light),
+                // (ID_LIGHT_POINT, point_light),
+                // (ID_LIGHT_SPOT, spot_light),
             ]);
 
             let mut camera = camera::Camera::new(gpu_state, deg(45.0), 0.5, 500.0);
@@ -139,4 +142,8 @@ fn main() {
             }
         },
     ));
+}
+
+fn main() {
+    cube_scene()
 }

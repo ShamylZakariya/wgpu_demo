@@ -141,7 +141,7 @@ pub async fn load_model(
         let normal_texture = load_texture(&m.normal_texture, device, queue, true, generate_mipmaps)
             .await
             .ok();
-        let shininess_texture =
+        let glossiness_texture =
             load_texture(&m.shininess_texture, device, queue, false, generate_mipmaps)
                 .await
                 .ok();
@@ -153,11 +153,11 @@ pub async fn load_model(
                 ambient,
                 diffuse,
                 specular,
-                shininess: m.shininess,
+                glossiness: m.shininess,
                 environment_map: Some(environment_map.clone()),
                 diffuse_texture,
                 normal_texture,
-                shininess_texture,
+                glossiness_texture,
             },
         ));
     }

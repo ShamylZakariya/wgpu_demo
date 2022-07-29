@@ -47,6 +47,7 @@ Make the scene render to texture and use a simple blitter pipeline to then displ
 
 - Milestone Six:
 	- Shadows
+	https://austin-eng.com/webgpu-samples/samples/shadowMapping
 	https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping
 
 ## Presently
@@ -63,12 +64,14 @@ Obj Model MTL Spec notes
 - Ks, map_Ks: specular reflectivity
 - d, map_d: dissolve, or opacity
 - Ns, map_Ns: specular exponent, or "sharpness"
-- map_Bump: normal map 
+- map_Bump: normal map
 
 
 
 
 ## Remember
+
+https://gpuweb.github.io/gpuweb/wgsl/#intro
 
 Do I want a GUI?
 	- https://github.com/emilk/egui#example

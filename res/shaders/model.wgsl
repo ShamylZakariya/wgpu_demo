@@ -6,7 +6,7 @@ struct Material {
     ambient: vec4<f32>,
     diffuse: vec4<f32>,
     specular: vec4<f32>,
-    shininess: f32,
+    glossiness: f32,
 };
 
 struct CameraUniform {
@@ -55,10 +55,10 @@ var normal_texture: texture_2d<f32>;
 var normal_sampler: sampler;
 
 @group(0) @binding(7)
-var shininess_texture: texture_2d<f32>;
+var glossiness_texture: texture_2d<f32>;
 
 @group(0) @binding(8)
-var shininess_sampler: sampler;
+var glossiness_sampler: sampler;
 
 @group(1) @binding(0)
 var<uniform> camera: CameraUniform;
@@ -253,7 +253,7 @@ fn fs_main_ambient_diffuse_normal(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 
 @fragment
-fn fs_main_ambient_diffuse_normal_shininess(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main_ambient_diffuse_normal_glossiness(in: VertexOutput) -> @location(0) vec4<f32> {
     let tangent_to_world = mat3x3<f32>(
         in.world_tangent,
         in.world_bitangent,
@@ -262,10 +262,10 @@ fn fs_main_ambient_diffuse_normal_shininess(in: VertexOutput) -> @location(0) ve
 
     let object_color = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
     let object_normal = tangent_to_world * (textureSample(normal_texture, normal_sampler, in.tex_coords).xyz * 2.0 - 1.0);
-    let object_shininess = material.specular.rgb * textureSample(shininess_texture, shininess_sampler, in.tex_coords).r;
+    let object_glossiness = material.specular.rgb * textureSample(glossiness_texture, glossiness_sampler, in.tex_coords).r;
     let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
     let environment_color = textureSample(environment_map_texture, environment_map_sampler, object_normal);
-    let environment_reflection = object_shininess * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
+    let environment_reflection = object_glossiness * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
     let ambient_color = (environment_color.rgb * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
     return vec4<f32>(ambient_color, object_color.a);
 }
@@ -276,10 +276,10 @@ fn fs_main_ambient_diffuse_normal_shininess(in: VertexOutput) -> @location(0) ve
 //
 
 @fragment
-fn fs_main_lit_diffuse_normal_shininess(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main_lit_diffuse_normal_glossiness(in: VertexOutput) -> @location(0) vec4<f32> {
     let object_color:vec4<f32> = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
     let object_normal:vec4<f32> = textureSample(normal_texture, normal_sampler, in.tex_coords);
-    let object_shininess:vec4<f32> = textureSample(shininess_texture, shininess_sampler, in.tex_coords);
+    let object_glossiness:vec4<f32> = textureSample(glossiness_texture, glossiness_sampler, in.tex_coords);
 
     let tangent_normal = object_normal.xyz * 2.0 - 1.0;
     let light_dir = fs_get_light_dir(in);
@@ -290,8 +290,8 @@ fn fs_main_lit_diffuse_normal_shininess(in: VertexOutput) -> @location(0) vec4<f
     let diffuse_strength = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
     let diffuse_color = light.color * diffuse_strength;
 
-    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), object_shininess.g * material.shininess);
-    let specular_color = object_shininess.r * specular_strength * light.color * material.specular.rgb;
+    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), object_glossiness.g * material.glossiness);
+    let specular_color = object_glossiness.r * specular_strength * light.color * material.specular.rgb;
 
     let result = (diffuse_color * object_color.rgb) + specular_color;
     return vec4<f32>(result, object_color.a);
@@ -311,7 +311,7 @@ fn fs_main_lit_diffuse_normal(in: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse_strength = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
     let diffuse_color = light.color * diffuse_strength;
 
-    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), material.shininess);
+    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), material.glossiness);
     let specular_color = material.specular.rgb * specular_strength * light.color;
 
     let result = (diffuse_color * object_color.rgb) + specular_color;
@@ -331,7 +331,7 @@ fn fs_main_lit_diffuse(in: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse_strength = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
     let diffuse_color = light.color * diffuse_strength;
 
-    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), material.shininess);
+    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), material.glossiness);
     let specular_color = material.specular.rgb * specular_strength * light.color;
 
     let result = (diffuse_color * object_color.rgb) + specular_color;
@@ -351,7 +351,7 @@ fn fs_main_lit_untextured(in: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse_strength = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
     let diffuse_color = light.color * diffuse_strength;
 
-    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), material.shininess);
+    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), material.glossiness);
     let specular_color = material.specular.rgb * specular_strength * light.color;
 
     let result = (diffuse_color * object_color.rgb) + specular_color;
