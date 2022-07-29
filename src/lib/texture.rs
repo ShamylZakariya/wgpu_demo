@@ -43,14 +43,30 @@ impl Texture {
             img
         };
 
-        Self::from_image(
+        Ok(Self::from_image(
             device,
             queue,
             img,
             Some(label),
             is_normal_map,
             generate_mipmaps,
-        )
+        ))
+    }
+
+    // creates a 1x1 white texture. This texture may act as a placeholder in a bind group.
+    // TODO: Learn how to mimic Metal's constant uniforms, so we don't have to use this.
+    pub fn new_placeholder(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        label: Option<&str>,
+    ) -> Self {
+        let mut swatch = image::DynamicImage::new_luma8(1, 1);
+        if let Some(swatch) = swatch.as_mut_luma8() {
+            let white = image::Luma([255_u8; 1]);
+            swatch.put_pixel(0, 0, white);
+        }
+
+        Self::from_image(device, queue, swatch, label, false, false)
     }
 
     fn from_image(
@@ -60,7 +76,7 @@ impl Texture {
         label: Option<&str>,
         is_normal_map: bool,
         generate_mipmaps: bool,
-    ) -> Result<Self> {
+    ) -> Self {
         let dimensions = img.dimensions();
         let mip_levels = if generate_mipmaps {
             (((dimensions.0.min(dimensions.1)) as f32).log(2.0).floor() as u32).max(1u32)
@@ -139,12 +155,12 @@ impl Texture {
             ..Default::default()
         });
 
-        Ok(Self {
+        Self {
             texture,
             view,
             sampler,
             view_dimension: wgpu::TextureViewDimension::D2,
-        })
+        }
     }
 
     pub fn cubemap_from_dds(

@@ -52,11 +52,9 @@ Make the scene render to texture and use a simple blitter pipeline to then displ
 
 ## Presently
 
-Material
-	Material is at present pretty bare bones and needs fleshing out
-	- shininess but as a power term, e.g., 1 -> 64 or whatever
-	- roughness which I guess maps to skybox mip?
-	- emission
+Had to pack has_texture fields into a vec4<> which is silly, but OK
+Reflection dir for environment map is broken.
+
 
 Obj Model MTL Spec notes
 - Ka, map_Ka: ambient

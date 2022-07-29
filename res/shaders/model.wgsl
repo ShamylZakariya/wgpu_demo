@@ -7,6 +7,7 @@ struct Material {
     diffuse: vec4<f32>,
     specular: vec4<f32>,
     glossiness: f32,
+    has_diffuse_normal_glossiness_textures: vec4<f32>,
 };
 
 struct CameraUniform {
@@ -102,6 +103,7 @@ struct VertexOutput {
     @location(8) tangent_light_dir: vec3<f32>,
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //  Util
 //
@@ -137,39 +139,10 @@ fn fs_compute_light_attenuation(in: VertexOutput) -> f32 {
     return light_attenuation;
 }
 
-//
-// Vertex
-//
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 @vertex
-fn vs_main_ambient(model: VertexInput, instance: InstanceInput) -> VertexOutput {
-    let model_matrix = mat4x4<f32>(
-        instance.model_matrix_0,
-        instance.model_matrix_1,
-        instance.model_matrix_2,
-        instance.model_matrix_3,
-    );
-
-    let normal_matrix = mat3x3<f32>(
-        instance.normal_matrix_1,
-        instance.normal_matrix_2,
-        instance.normal_matrix_3,
-    );
-
-    var world_position: vec4<f32> = model_matrix * vec4<f32>(model.position, 1.0);
-
-    var out: VertexOutput;
-    out.clip_position = camera.view_proj * world_position;
-    out.world_position = world_position;
-    out.tex_coords = model.tex_coords;
-    out.world_normal = normal_matrix * model.normal;
-    out.world_tangent = normal_matrix * model.tangent;
-    out.world_bitangent = normal_matrix * model.bitangent;
-    return out;
-}
-
-@vertex
-fn vs_main_lit(model: VertexInput, instance: InstanceInput) -> VertexOutput {
+fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     let model_matrix = mat4x4<f32>(
         instance.model_matrix_0,
         instance.model_matrix_1,
@@ -192,13 +165,17 @@ fn vs_main_lit(model: VertexInput, instance: InstanceInput) -> VertexOutput {
         world_normal
     ));
 
-    var world_position: vec4<f32> = model_matrix * vec4<f32>(model.position, 1.0);
+    let world_position: vec4<f32> = model_matrix * vec4<f32>(model.position, 1.0);
 
     var out: VertexOutput;
     out.clip_position = camera.view_proj * world_position;
-    out.world_position = world_position;
     out.tex_coords = model.tex_coords;
+
+    out.world_position = world_position;
     out.world_normal = world_normal;
+    out.world_tangent = world_tangent;
+    out.world_bitangent = world_bitangent;
+
     out.tangent_position = tangent_matrix * world_position.xyz;
     out.tangent_view_position = tangent_matrix * camera.view_pos.xyz;
     out.tangent_light_position = tangent_matrix * light.position;
@@ -207,153 +184,81 @@ fn vs_main_lit(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     return out;
 }
 
-//
-// Fragment Ambient
-//
-
 @fragment
-fn fs_main_ambient_untextured(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color = material.diffuse;
-    let object_normal = in.world_normal;
-    let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
-    let environment_color = textureSample(environment_map_texture, environment_map_sampler, in.world_normal).rgb;
-    let environment_reflection = material.specular.rgb * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
-    let ambient_color = (environment_color.rgb * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
-
-    return vec4<f32>(environment_reflection + ambient_color, object_color.a);
-}
-
-@fragment
-fn fs_main_ambient_diffuse(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
-    let object_normal = in.world_normal;
-    let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
-    let environment_color = textureSample(environment_map_texture, environment_map_sampler, in.world_normal).rgb;
-    let environment_reflection = material.specular.rgb * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
-    let ambient_color = (environment_color.rgb * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
-
-    return vec4<f32>(environment_reflection + ambient_color, object_color.a);
-}
-
-@fragment
-fn fs_main_ambient_diffuse_normal(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main_ambient(in: VertexOutput) -> @location(0) vec4<f32> {
     let tangent_to_world = mat3x3<f32>(
         in.world_tangent,
         in.world_bitangent,
         in.world_normal
     );
 
-    let object_color = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
-    let object_normal = tangent_to_world * (textureSample(normal_texture, normal_sampler, in.tex_coords).xyz * 2.0 - 1.0);
-    let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
-    let environment_color = textureSample(environment_map_texture, environment_map_sampler, object_normal);
-    let environment_reflection = material.specular.rgb * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
-    let ambient_color = (environment_color.rgb * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
-    return vec4<f32>(ambient_color, object_color.a);
-}
+    // texture lookups
+    let object_diffuse_tex = textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
+    let object_normal_tex = tangent_to_world * (textureSample(normal_texture, normal_sampler, in.tex_coords).xyz * 2.0 - 1.0);
+    let object_glossiness_tex = textureSample(glossiness_texture, glossiness_sampler, in.tex_coords).r;
 
-@fragment
-fn fs_main_ambient_diffuse_normal_glossiness(in: VertexOutput) -> @location(0) vec4<f32> {
-    let tangent_to_world = mat3x3<f32>(
-        in.world_tangent,
-        in.world_bitangent,
-        in.world_normal
-    );
+    // conditionally apply texture values if bound
+    var object_color = material.diffuse;
+    if (material.has_diffuse_normal_glossiness_textures.r > 0.0) {
+        object_color *= object_diffuse_tex;
+    }
 
-    let object_color = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
-    let object_normal = tangent_to_world * (textureSample(normal_texture, normal_sampler, in.tex_coords).xyz * 2.0 - 1.0);
-    let object_glossiness = material.specular.rgb * textureSample(glossiness_texture, glossiness_sampler, in.tex_coords).r;
+    var object_normal = in.world_normal;
+    if (material.has_diffuse_normal_glossiness_textures.g > 0.0) {
+        object_normal = object_normal_tex;
+    }
+
+    var object_glossiness = material.glossiness;
+    if (material.has_diffuse_normal_glossiness_textures.b > 0.0) {
+        object_glossiness *= object_glossiness_tex;
+    }
+
     let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
     let environment_color = textureSample(environment_map_texture, environment_map_sampler, object_normal);
     let environment_reflection = object_glossiness * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
     let ambient_color = (environment_color.rgb * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
-    return vec4<f32>(ambient_color, object_color.a);
+
+    // environment reflection is broken. is the reflection_dir wrong?
+    return vec4<f32>(environment_reflection.rgb, 1.0);
+
+    // return vec4<f32>(ambient_color, object_color.a);
 }
 
-
-//
-//  Fragment Lit
-//
-
 @fragment
-fn fs_main_lit_diffuse_normal_glossiness(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color:vec4<f32> = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
-    let object_normal:vec4<f32> = textureSample(normal_texture, normal_sampler, in.tex_coords);
-    let object_glossiness:vec4<f32> = textureSample(glossiness_texture, glossiness_sampler, in.tex_coords);
+fn fs_main_lit(in: VertexOutput) -> @location(0) vec4<f32> {
+    // texture lookups
+    let object_color_tex = textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
+    let object_tangent_normal_tex = textureSample(normal_texture, normal_sampler, in.tex_coords).xyz * 2.0 - 1.0;
+    let object_glossiness_tex = textureSample(glossiness_texture, glossiness_sampler, in.tex_coords).r;
 
-    let tangent_normal = object_normal.xyz * 2.0 - 1.0;
+    // conditionally apply texture values if bound
+    var object_color = material.diffuse;
+    if (material.has_diffuse_normal_glossiness_textures.r > 0.0) {
+        object_color *= object_color_tex;
+    }
+
+    var tangent_normal = vec3<f32>(0.0, 0.0, 1.0);
+    if (material.has_diffuse_normal_glossiness_textures.g > 0.0) {
+        tangent_normal = object_tangent_normal_tex;
+    }
+
+    var object_glossiness = material.glossiness;
+    if (material.has_diffuse_normal_glossiness_textures.b > 0.0) {
+        object_glossiness *= object_glossiness_tex;
+    }
+
     let light_dir = fs_get_light_dir(in);
     let view_dir = normalize(in.tangent_view_position - in.tangent_position);
     let half_dir = normalize(view_dir + light_dir);
     let light_attenuation = fs_compute_light_attenuation(in);
 
-    let diffuse_strength = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
-    let diffuse_color = light.color * diffuse_strength;
+    let diffuse_magnitude = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
+    let diffuse_color = light.color * diffuse_magnitude;
 
-    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), object_glossiness.g * material.glossiness);
-    let specular_color = object_glossiness.r * specular_strength * light.color * material.specular.rgb;
-
-    let result = (diffuse_color * object_color.rgb) + specular_color;
-    return vec4<f32>(result, object_color.a);
-}
-
-@fragment
-fn fs_main_lit_diffuse_normal(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color:vec4<f32> = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
-    let object_normal:vec4<f32> = textureSample(normal_texture, normal_sampler, in.tex_coords);
-
-    let tangent_normal = object_normal.xyz * 2.0 - 1.0;
-    let light_dir = fs_get_light_dir(in);
-    let view_dir = normalize(in.tangent_view_position - in.tangent_position);
-    let half_dir = normalize(view_dir + light_dir);
-    let light_attenuation = fs_compute_light_attenuation(in);
-
-    let diffuse_strength = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
-    let diffuse_color = light.color * diffuse_strength;
-
-    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), material.glossiness);
-    let specular_color = material.specular.rgb * specular_strength * light.color;
+    let specular_magnitude = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), object_glossiness);
+    let specular_color = light.color * material.specular.rgb * specular_magnitude;
 
     let result = (diffuse_color * object_color.rgb) + specular_color;
-    return vec4<f32>(result, object_color.a);
-}
 
-@fragment
-fn fs_main_lit_diffuse(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color:vec4<f32> = material.diffuse * textureSample(diffuse_texture, diffuse_sampler, in.tex_coords);
-
-    let tangent_normal = vec3<f32>(0.0, 0.0, 1.0);
-    let light_dir = fs_get_light_dir(in);
-    let view_dir = normalize(in.tangent_view_position - in.tangent_position);
-    let half_dir = normalize(view_dir + light_dir);
-    let light_attenuation = fs_compute_light_attenuation(in);
-
-    let diffuse_strength = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
-    let diffuse_color = light.color * diffuse_strength;
-
-    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), material.glossiness);
-    let specular_color = material.specular.rgb * specular_strength * light.color;
-
-    let result = (diffuse_color * object_color.rgb) + specular_color;
-    return vec4<f32>(result, object_color.a);
-}
-
-@fragment
-fn fs_main_lit_untextured(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color:vec4<f32> = material.diffuse;
-
-    let tangent_normal = vec3<f32>(0.0, 0.0, 1.0);
-    let light_dir = fs_get_light_dir(in);
-    let view_dir = normalize(in.tangent_view_position - in.tangent_position);
-    let half_dir = normalize(view_dir + light_dir);
-    let light_attenuation = fs_compute_light_attenuation(in);
-
-    let diffuse_strength = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
-    let diffuse_color = light.color * diffuse_strength;
-
-    let specular_strength = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), material.glossiness);
-    let specular_color = material.specular.rgb * specular_strength * light.color;
-
-    let result = (diffuse_color * object_color.rgb) + specular_color;
     return vec4<f32>(result, object_color.a);
 }

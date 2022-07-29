@@ -148,6 +148,7 @@ pub async fn load_model(
 
         materials.push(model::Material::new(
             device,
+            queue,
             model::MaterialProperties {
                 name: &m.name,
                 ambient,

@@ -34,7 +34,7 @@ where
 }
 
 #[allow(dead_code, unused_variables)]
-fn cube_scene() {
+fn multi_cube_scene() {
     // Light definitions
     const ID_LIGHT_AMBIENT: usize = 0;
     const ID_LIGHT_PRIMARY: usize = 1;
@@ -144,6 +144,62 @@ fn cube_scene() {
     ));
 }
 
+#[allow(dead_code, unused_variables)]
+fn single_cube_scene() {
+    // Light definitions
+    const ID_LIGHT_AMBIENT: usize = 0;
+    const ID_LIGHT_PRIMARY: usize = 1;
+
+    // Model definitions
+    const ID_MODEL_CUBE: usize = 0;
+
+    env_logger::init();
+
+    pollster::block_on(lib::app::run(
+        |_window, gpu_state| {
+            let environment_map = Rc::new(
+                resources::load_cubemap_texture_sync(
+                    "env-map.dds",
+                    &gpu_state.device,
+                    &gpu_state.queue,
+                )
+                .unwrap(),
+            );
+
+            let cube_position = Point3::new(0., 0., 0.);
+
+            let cube = HashMap::from([(
+                ID_MODEL_CUBE,
+                load_model(
+                    "cube.obj",
+                    Some("untextured.mtl"),
+                    &[cube_position],
+                    gpu_state,
+                    environment_map.clone(),
+                ),
+            )]);
+
+            let directional_light = light::Light::new_directional(
+                &gpu_state.device,
+                &light::DirectionalLightDescriptor {
+                    direction: (1.0, 1.0, 0.0).into(),
+                    ambient: (0.0, 0.0, 0.0).into(),
+                    color: (1.0, 1.0, 1.0).into(),
+                    constant_attenuation: 0.2,
+                },
+            );
+
+            let lights = HashMap::from([(ID_LIGHT_PRIMARY, directional_light)]);
+
+            let mut camera = camera::Camera::new(gpu_state, deg(45.0), 0.5, 500.0);
+            camera.look_at((0.0, 1.0, -3.0), (62.5, 0.0, 62.5), (0.0, 1.0, 0.0));
+
+            scene::Scene::new(gpu_state, camera, environment_map, lights, cube)
+        },
+        |scene| {},
+    ));
+}
+
 fn main() {
-    cube_scene()
+    single_cube_scene()
 }

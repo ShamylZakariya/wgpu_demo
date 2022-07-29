@@ -113,6 +113,7 @@ pub struct MaterialUniform {
     specular: Vec4,
     glossiness: f32,
     _padding: [f32; 3],
+    has_diffuse_normal_glossiness_textures: Vec4,
 }
 
 unsafe impl bytemuck::Pod for MaterialUniform {}
@@ -125,7 +126,8 @@ impl Default for MaterialUniform {
             ambient: one,
             diffuse: one,
             specular: one,
-            glossiness: 1.0,
+            glossiness: 0.0,
+            has_diffuse_normal_glossiness_textures: Vec4::new(0.0, 0.0, 0.0, 0.0),
             _padding: Default::default(),
         }
     }
@@ -166,9 +168,9 @@ pub struct Material {
     pub specular: Vec4,
     pub glossiness: f32,
     pub environment_map: Option<Rc<texture::Texture>>,
-    pub diffuse_texture: Option<texture::Texture>,
-    pub normal_texture: Option<texture::Texture>,
-    pub glossiness_texture: Option<texture::Texture>,
+    pub diffuse_texture: texture::Texture,
+    pub normal_texture: texture::Texture,
+    pub glossiness_texture: texture::Texture,
     pub material_uniform: MaterialUniform, // represents non-texture uniforms
     pub material_uniform_buffer: wgpu::Buffer, // represents non-texture uniforms
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -178,7 +180,7 @@ pub struct Material {
 }
 
 impl Material {
-    pub fn new(device: &wgpu::Device, properties: MaterialProperties) -> Self {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, properties: MaterialProperties) -> Self {
         let mut bind_group_layout_entries = Vec::new();
         let mut bind_group_entries = Vec::new();
         let mut base_id = String::new();
@@ -188,6 +190,24 @@ impl Material {
             diffuse: color4(properties.diffuse),
             specular: color4(properties.specular),
             glossiness: properties.glossiness,
+            has_diffuse_normal_glossiness_textures: Vec4::new(
+                if properties.diffuse_texture.is_some() {
+                    1_f32
+                } else {
+                    0_f32
+                },
+                if properties.normal_texture.is_some() {
+                    1_f32
+                } else {
+                    0_f32
+                },
+                if properties.glossiness_texture.is_some() {
+                    1_f32
+                } else {
+                    0_f32
+                },
+                0.0,
+            ),
             ..Default::default()
         };
 
@@ -225,39 +245,55 @@ impl Material {
             );
         }
 
-        if let Some(texture) = &properties.diffuse_texture {
-            base_id = format!("{}(diffuse-{})", base_id, offset);
-            offset += Self::create_bind_groups_for(
-                texture,
-                offset,
-                &mut bind_group_layout_entries,
-                &mut bind_group_entries,
-            );
-        }
+        let diffuse_texture =
+            properties
+                .diffuse_texture
+                .unwrap_or(texture::Texture::new_placeholder(
+                    device,
+                    queue,
+                    Some("Diffuse Placeholder"),
+                ));
+        base_id = format!("{}(diffuse-{})", base_id, offset);
+        offset += Self::create_bind_groups_for(
+            &diffuse_texture,
+            offset,
+            &mut bind_group_layout_entries,
+            &mut bind_group_entries,
+        );
 
-        if let Some(texture) = &properties.normal_texture {
-            base_id = format!("{}(normal-{})", base_id, offset);
-            offset += Self::create_bind_groups_for(
-                texture,
-                offset,
-                &mut bind_group_layout_entries,
-                &mut bind_group_entries,
-            );
-        }
+        let normal_texture =
+            properties
+                .normal_texture
+                .unwrap_or(texture::Texture::new_placeholder(
+                    device,
+                    queue,
+                    Some("Normal Placeholder"),
+                ));
 
-        if let Some(texture) = &properties.glossiness_texture {
-            base_id = format!("{}(glossiness-{})", base_id, offset);
-            Self::create_bind_groups_for(
-                texture,
-                offset,
-                &mut bind_group_layout_entries,
-                &mut bind_group_entries,
-            );
-        }
+        base_id = format!("{}(normal-{})", base_id, offset);
+        offset += Self::create_bind_groups_for(
+            &normal_texture,
+            offset,
+            &mut bind_group_layout_entries,
+            &mut bind_group_entries,
+        );
 
-        if base_id.is_empty() {
-            base_id = "untextured".to_string();
-        }
+        let glossiness_texture =
+            properties
+                .glossiness_texture
+                .unwrap_or(texture::Texture::new_placeholder(
+                    device,
+                    queue,
+                    Some("Glossiness Placeholder"),
+                ));
+
+        base_id = format!("{}(glossiness-{})", base_id, offset);
+        Self::create_bind_groups_for(
+            &glossiness_texture,
+            offset,
+            &mut bind_group_layout_entries,
+            &mut bind_group_entries,
+        );
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &bind_group_layout_entries,
@@ -277,9 +313,9 @@ impl Material {
             specular: properties.specular,
             glossiness: properties.glossiness,
             environment_map: properties.environment_map,
-            diffuse_texture: properties.diffuse_texture,
-            normal_texture: properties.normal_texture,
-            glossiness_texture: properties.glossiness_texture,
+            diffuse_texture: diffuse_texture,
+            normal_texture: normal_texture,
+            glossiness_texture: glossiness_texture,
             material_uniform,
             material_uniform_buffer,
             bind_group,
@@ -342,66 +378,18 @@ impl Material {
         }
     }
 
-    fn vertex_main(&self, pass: &render_pipeline::Pass) -> &'static str {
-        match pass {
-            render_pipeline::Pass::Ambient => "vs_main_ambient",
-            render_pipeline::Pass::Lit => "vs_main_lit",
-        }
+    fn vertex_main(&self, _pass: &render_pipeline::Pass) -> &'static str {
+        "vs_main"
     }
 
     fn fragment_main(&self, pass: &render_pipeline::Pass) -> &'static str {
         match pass {
-            render_pipeline::Pass::Ambient => self.ambient_fragment_main(),
-            render_pipeline::Pass::Lit => self.lit_fragment_main(),
+            render_pipeline::Pass::Ambient => "fs_main_ambient",
+            render_pipeline::Pass::Lit => "fs_main_lit",
         }
     }
 
-    fn shader(&self, pass: &render_pipeline::Pass) -> &'static str {
-        match pass {
-            render_pipeline::Pass::Ambient => self.ambient_shader(),
-            render_pipeline::Pass::Lit => self.lit_shader(),
-        }
-    }
-
-    fn ambient_fragment_main(&self) -> &'static str {
-        match (
-            &self.diffuse_texture,
-            &self.normal_texture,
-            &self.glossiness_texture,
-        ) {
-            (None, None, None) => "fs_main_ambient_untextured",
-            (Some(_), None, None) => "fs_main_ambient_diffuse",
-            (Some(_), Some(_), None) => "fs_main_ambient_diffuse_normal",
-            (Some(_), Some(_), Some(_)) => "fs_main_ambient_diffuse_normal_glossiness",
-            _ => unimplemented!(
-                "Material::ambient_fragment_main doesn't support texture conbination specified"
-            ),
-        }
-    }
-
-    fn ambient_shader(&self) -> &'static str {
-        "shaders/model.wgsl"
-    }
-
-    fn lit_fragment_main(&self) -> &'static str {
-        match (
-            &self.diffuse_texture,
-            &self.normal_texture,
-            &self.glossiness_texture,
-        ) {
-            (None, None, None) => "fs_main_lit_untextured",
-            (Some(_), None, None) => "fs_main_lit_diffuse",
-            (Some(_), Some(_), None) => "fs_main_lit_diffuse_normal",
-            (Some(_), Some(_), Some(_)) => "fs_main_lit_diffuse_normal_glossiness",
-            _ => {
-                unimplemented!(
-                    "Material::lit_fragment_main doesn't support texture combination specified"
-                )
-            }
-        }
-    }
-
-    fn lit_shader(&self) -> &'static str {
+    fn shader(&self, _pass: &render_pipeline::Pass) -> &'static str {
         "shaders/model.wgsl"
     }
 
