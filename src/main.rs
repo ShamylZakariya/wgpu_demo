@@ -172,7 +172,7 @@ fn single_cube_scene() {
                 ID_MODEL_CUBE,
                 load_model(
                     "cube.obj",
-                    Some("untextured.mtl"),
+                    Some("diffuse-normal-glossiness.mtl"),
                     &[cube_position],
                     gpu_state,
                     environment_map.clone(),

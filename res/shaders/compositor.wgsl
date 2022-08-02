@@ -72,7 +72,7 @@ fn compositor_vs_main(
 fn scene(in: VertexOutput) -> vec4<f32> {
     var color = textureSample(color_attachment_texture, color_attachment_sampler, in.tex_coord);
     let depth = textureSample(depth_attachment_texture, depth_attachment_sampler, in.tex_coord).r;
-    let sky_color = textureSampleBias(environment_map_texture, environment_map_sampler, normalize(in.view_dir), 0.0);
+    let sky_color = textureSampleBias(environment_map_texture, environment_map_sampler, normalize(in.view_dir) * vec3<f32>(1.0, -1.0, 1.0), 0.0);
 
     if (depth < 1.0) {
         return color;

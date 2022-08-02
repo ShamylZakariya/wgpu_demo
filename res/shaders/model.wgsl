@@ -213,15 +213,18 @@ fn fs_main_ambient(in: VertexOutput) -> @location(0) vec4<f32> {
         object_glossiness *= object_glossiness_tex;
     }
 
+    object_glossiness = 1.0;
+
+    let reflection_bias = vec3<f32>(1.0, -1.0, 1.0);
+    let reflection_mip = 8.0 * (1.0 - object_glossiness);
     let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
-    let environment_color = textureSample(environment_map_texture, environment_map_sampler, object_normal);
-    let environment_reflection = object_glossiness * textureSample(environment_map_texture, environment_map_sampler, reflection_dir).rgb;
-    let ambient_color = (environment_color.rgb * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
 
-    // environment reflection is broken. is the reflection_dir wrong?
-    return vec4<f32>(environment_reflection.rgb, 1.0);
+    let environment_color = textureSample(environment_map_texture, environment_map_sampler, object_normal * reflection_bias).rgb;
+    let environment_reflection = textureSampleBias(environment_map_texture, environment_map_sampler, reflection_dir * reflection_bias, reflection_mip).rgb;
+    let ambient_color = (environment_color * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
+    let result = mix(ambient_color, environment_reflection, vec3<f32>(object_glossiness));
 
-    // return vec4<f32>(ambient_color, object_color.a);
+    return vec4<f32>(result, object_color.a);
 }
 
 @fragment
@@ -255,7 +258,7 @@ fn fs_main_lit(in: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse_magnitude = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
     let diffuse_color = light.color * diffuse_magnitude;
 
-    let specular_magnitude = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), object_glossiness);
+    let specular_magnitude = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), object_glossiness * 300.0);
     let specular_color = light.color * material.specular.rgb * specular_magnitude;
 
     let result = (diffuse_color * object_color.rgb) + specular_color;
