@@ -6,7 +6,7 @@ struct Material {
     ambient: vec4<f32>,
     diffuse: vec4<f32>,
     specular: vec4<f32>,
-    glossiness: f32,
+    specular_exponent: f32,
     has_diffuse_normal_glossiness_textures: vec4<f32>,
 };
 
@@ -208,21 +208,20 @@ fn fs_main_ambient(in: VertexOutput) -> @location(0) vec4<f32> {
         object_normal = object_normal_tex;
     }
 
-    var object_glossiness = material.glossiness;
+    var object_specular_exponent = material.specular_exponent;
     if (material.has_diffuse_normal_glossiness_textures.b > 0.0) {
-        object_glossiness *= object_glossiness_tex;
+        object_specular_exponent *= object_glossiness_tex;
     }
 
-    object_glossiness = 1.0;
-
     let reflection_bias = vec3<f32>(1.0, -1.0, 1.0);
-    let reflection_mip = 8.0 * (1.0 - object_glossiness);
+    let shininess = dot(material.specular.rgb, vec3<f32>(0.3, 0.59, 0.11));
+    let reflection_mip = 8.0 * (1.0 - shininess);
     let reflection_dir = reflect(normalize(in.world_position.xyz - camera.view_pos.xyz), object_normal);
 
     let environment_color = textureSample(environment_map_texture, environment_map_sampler, object_normal * reflection_bias).rgb;
     let environment_reflection = textureSampleBias(environment_map_texture, environment_map_sampler, reflection_dir * reflection_bias, reflection_mip).rgb;
     let ambient_color = (environment_color * material.ambient.rgb * object_color.rgb) + (light.ambient * object_color.rgb);
-    let result = mix(ambient_color, environment_reflection, vec3<f32>(object_glossiness));
+    let result = mix(ambient_color, environment_reflection, vec3<f32>(shininess));
 
     return vec4<f32>(result, object_color.a);
 }
@@ -245,9 +244,9 @@ fn fs_main_lit(in: VertexOutput) -> @location(0) vec4<f32> {
         tangent_normal = object_tangent_normal_tex;
     }
 
-    var object_glossiness = material.glossiness;
+    var object_specular_exponent = material.specular_exponent;
     if (material.has_diffuse_normal_glossiness_textures.b > 0.0) {
-        object_glossiness *= object_glossiness_tex;
+        object_specular_exponent *= object_glossiness_tex;
     }
 
     let light_dir = fs_get_light_dir(in);
@@ -258,7 +257,7 @@ fn fs_main_lit(in: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse_magnitude = light_attenuation * max(dot(tangent_normal, light_dir), 0.0);
     let diffuse_color = light.color * diffuse_magnitude;
 
-    let specular_magnitude = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), object_glossiness * 300.0);
+    let specular_magnitude = light_attenuation * pow(max(dot(tangent_normal, half_dir), 0.0), object_specular_exponent);
     let specular_color = light.color * material.specular.rgb * specular_magnitude;
 
     let result = (diffuse_color * object_color.rgb) + specular_color;

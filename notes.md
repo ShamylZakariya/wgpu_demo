@@ -53,7 +53,20 @@ Make the scene render to texture and use a simple blitter pipeline to then displ
 ## Presently
 
 Had to pack has_texture fields into a vec4<> which is silly, but OK
-Reflection dir for environment map is broken.
+
+Glossiness/specular are getting there but not done. Should I refine it? Or should I just go PBR?
+
+The rename to "glossiness" may have been in error. Should have been "specular_exponent" for the material
+
+texture/uniform
+	- diffuse
+	- roughness. The texture has value from [0,1] and the material field could be, what, the max? De we want to use (1-x) ? Is a value of 1 rough? Or shiny?
+	- specular
+	- normal
+	- ao ???
+
+
+- illumination model?
 
 
 Obj Model MTL Spec notes

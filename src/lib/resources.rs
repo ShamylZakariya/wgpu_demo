@@ -154,7 +154,7 @@ pub async fn load_model(
                 ambient,
                 diffuse,
                 specular,
-                glossiness: (m.shininess / 300.0).clamp(0.0, 1.0),
+                specular_exponent: m.shininess,
                 environment_map: Some(environment_map.clone()),
                 diffuse_texture,
                 normal_texture,

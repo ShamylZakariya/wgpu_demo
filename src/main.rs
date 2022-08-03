@@ -166,14 +166,14 @@ fn single_cube_scene() {
                 .unwrap(),
             );
 
-            let cube_position = Point3::new(0., 0., 0.);
+            let position = Point3::new(0., 0., 0.);
 
             let cube = HashMap::from([(
                 ID_MODEL_CUBE,
                 load_model(
-                    "cube.obj",
-                    Some("diffuse-normal-glossiness.mtl"),
-                    &[cube_position],
+                    "ferris3d_v1.0.obj",
+                    None,
+                    &[position],
                     gpu_state,
                     environment_map.clone(),
                 ),
